@@ -1,0 +1,26 @@
+.venv/
+__pycache__/
+.pytest_cache/
+output/
+.playwright-cli/
+*.pyc
+
+# Datos personales y archivos generados: nunca se publican.
+*.eml
+*.sqlite3
+*.sqlite3-*
+*.db
+*.db-*
+*.zip
+*.log
+*.pem
+*.key
+*.lock
+!requirements-lock.txt
+config.json
+sync.json
+.env
+.env.*
+!.env.example
+CorreoUNS/
+messages/
