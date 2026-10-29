@@ -154,7 +154,7 @@ def test_auth_failure_real_server(service,vault,tls_files,sample,monkeypatch):
     with server('smtp',tls_files,sample,auth=False) as (port,state):
         configure(service,vault,'smtp',port)
         import smtplib
-        with pytest.raises(smtplib.SMTPAuthenticationError):service.diagnostic('smtp')
+        with pytest.raises(UserError,match='SMTP 535'):service.diagnostic('smtp')
         assert not state['data']
 
 

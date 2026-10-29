@@ -38,6 +38,34 @@ def explain(exc):
     return 'No se pudo completar la operación. Revisá la configuración y el espacio disponible en disco.'
 
 
+def connection_error(protocol, stage, exc):
+    """Return only our text and allowlisted codes, never a raw server reply."""
+    prefix = f'{protocol} · {stage}: '
+    if isinstance(exc, smtplib.SMTPAuthenticationError):
+        code = exc.smtp_code if isinstance(exc.smtp_code,int) and 100<=exc.smtp_code<=599 else None
+        if code == 454:
+            return prefix+'SMTP 454: autenticación temporalmente no disponible. Esperá antes de volver a probar; no implica necesariamente una contraseña incorrecta.'
+        if code == 535:
+            return prefix+'SMTP 535: el servidor rechazó la autenticación. Puede deberse a credenciales, una cuenta restringida o una política del servidor. La conexión TLS ya se estableció.'
+        return prefix+(f'SMTP {code}: ' if code else '')+'el servidor no aceptó la autenticación. Revisá el acceso de la cuenta al servicio de envío.'
+    if isinstance(exc,poplib.error_proto):
+        # Inspect only to map a known condition; no reply text is copied to the UI/logs.
+        response = str(exc).upper()
+        if any(marker in response for marker in ('[SYS/TEMP]','TEMPORARY','TRY AGAIN LATER','TEMPORAR')):
+            return prefix+'el servidor informó un fallo temporal. Puede ser el servicio de autenticación de la UNS; esperá antes de reintentar.'
+        if any(marker in response for marker in ('[IN-USE]','[LOGIN-DELAY]','MAILBOX IS LOCKED','MAILBOX LOCKED','TOO MANY CONNECTIONS')):
+            return prefix+'el buzón está ocupado o el servidor limitó los accesos. Cerrá otros clientes de correo y esperá antes de probar otra vez.'
+        if stage in ('usuario USER','contraseña PASS'):
+            return prefix+'POP3 -ERR: el servidor rechazó el acceso a la cuenta. La conexión TLS ya se estableció. Esto puede deberse a credenciales, bloqueo temporal o una restricción de la cuenta.'
+        return prefix+'POP3 -ERR: el servidor rechazó esta etapa del protocolo; todavía no se comprobó la contraseña.'
+    if isinstance(exc,smtplib.SMTPNotSupportedError):
+        return prefix+'el servidor no anuncia la función requerida (STARTTLS o autenticación). No se usó una conexión sin cifrar.'
+    if isinstance(exc,smtplib.SMTPResponseException):
+        code=exc.smtp_code if isinstance(exc.smtp_code,int) and 100<=exc.smtp_code<=599 else None
+        return prefix+(f'SMTP {code}: ' if code else '')+'el servidor rechazó esta etapa de la conexión.'
+    return prefix+explain(exc)
+
+
 class Service:
     def __init__(self, store, secrets):
         self.store, self.secrets = store, secrets
@@ -63,47 +91,51 @@ class Service:
             raise UserError('Completá la dirección de correo y el usuario POP3 en Configuración.')
         context = ssl.create_default_context()
         client = None
-
+        stage = 'conexión y saludo'
         try:
             if config['pop_tls'] == 'ssl':
                 client = poplib.POP3_SSL(config['pop_host'], config['pop_port'], timeout=25, context=context)
             else:
                 client = poplib.POP3(config['pop_host'], config['pop_port'], timeout=25)
-
+                stage = 'negociación STARTTLS'
                 client.stls(context=context)
-
+            stage = 'usuario USER'
             client.user(config['pop_user'])
-
+            stage = 'contraseña PASS'
             client.pass_(self.password(config,'pop'))
             return client
-        except BaseException:
+        except BaseException as exc:
             if client:
                 close_client(client)
+            if isinstance(exc,Exception) and not isinstance(exc,(UserError,ssl.SSLCertVerificationError)):
+                raise UserError(connection_error('POP3',stage,exc)) from None
             raise
 
     def smtp(self, config):
         if not config['address'] or not config['smtp_user']:
             raise UserError('Completá la dirección de correo y el usuario SMTP en Configuración.')
         client = None
-
+        stage = 'conexión y saludo'
         try:
             context = ssl.create_default_context()
             if config['smtp_tls'] == 'ssl':
                 client = smtplib.SMTP_SSL(config['smtp_host'], config['smtp_port'], timeout=25, context=context)
             else:
                 client = smtplib.SMTP(config['smtp_host'], config['smtp_port'], timeout=25)
-
+                stage = 'saludo EHLO previo a TLS'
                 client.ehlo()
-
+                stage = 'negociación STARTTLS'
                 client.starttls(context=context)
-
+            stage = 'saludo EHLO con TLS'
             client.ehlo()
-
+            stage = 'autenticación AUTH'
             client.login(config['smtp_user'], self.password(config,'smtp'))
             return client
-        except BaseException:
+        except BaseException as exc:
             if client:
                 close_client(client)
+            if isinstance(exc,Exception) and not isinstance(exc,(UserError,ssl.SSLCertVerificationError)):
+                raise UserError(connection_error('SMTP',stage,exc)) from None
             raise
 
     def uidls(self, client):
