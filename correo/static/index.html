@@ -1,0 +1,28 @@
+<!doctype html>
+<html lang="es">
+<head>
+  <meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+  <meta name="csrf-token" content="__CSRF__"><title>Correo UNS</title>
+  <link rel="stylesheet" href="/style.css"><script src="/app.js" defer></script>
+</head>
+<body>
+  <header><h1>Correo UNS</h1><span>Archivo personal · En esta PC</span></header>
+  <div class="toolbar">
+    <button id="sync">Recibir correo</button><button id="compose">Redactar</button>
+    <form id="search-form"><label for="search">Buscar</label><input type="search" id="search" placeholder="Asunto, remitente o texto"><button>Buscar</button></form>
+  </div>
+  <div id="notice" role="status" hidden></div>
+  <div class="workspace">
+    <nav aria-label="Carpetas y opciones">
+      <h2>Buzones</h2>
+      <button data-folder="inbox" class="selected">Bandeja de entrada</button>
+      <button data-folder="drafts">Borradores</button>
+      <button data-folder="sent">Enviados</button>
+      <button data-folder="outbox">Envíos pendientes</button>
+      <button data-folder="archive">Archivo local</button>
+      <h2>Aplicación</h2><button id="settings">Configuración</button><button id="backups">Respaldo y restauración</button><button id="help">Ayuda</button>
+    </nav>
+    <main id="main" tabindex="-1"><p>Cargando el archivo local…</p></main>
+  </div>
+  <footer><span id="progress" aria-live="polite">Sin actualizaciones en esta sesión.</span><span id="last-update"></span></footer>
+</body></html>
