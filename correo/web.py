@@ -14,6 +14,7 @@ from fastapi.exceptions import RequestValidationError
 from pydantic import BaseModel, ConfigDict, Field, field_validator
 from .store import Store, DEFAULT, secret_key
 from .secrets import Secrets
+from .paths import data_root
 from .service import Service, UserError, explain
 from .mime import content, sanitized_html, build_message, addresses, safe_name
 
@@ -97,7 +98,7 @@ class Flags(BaseModel):
 
 
 def create_app(root=None, start_worker=True, vault=None):
-    root = root or Path(os.environ.get('LOCALAPPDATA',Path.home()))/'CorreoUNS'
+    root = root or data_root()
     store = Store(root)
     vault = vault or Secrets()
     service = Service(store,vault)
@@ -160,7 +161,7 @@ def create_app(root=None, start_worker=True, vault=None):
 
     @app.get('/',response_class=HTMLResponse)
     def home():
-        return (ASSETS/'index.html').read_text('utf-8').replace('__CSRF__',token)
+        return (ASSETS/'index.html').read_text('utf-8').replace('__CSRF__',token).replace('__QUIT_BUTTON__', '<button id="quit">Salir de Correo UNS</button>' if hasattr(app.state,'exit_requested') else '')
 
     @app.get('/app.js')
     def js():
@@ -202,7 +203,7 @@ def create_app(root=None, start_worker=True, vault=None):
         if protocol not in ('pop','smtp'):
             raise HTTPException(404)
         saved = vault.put(secret_key(store.config(),protocol),value.password,value.persist)
-        return {'message':'Contraseña guardada en el Administrador de credenciales de Windows.' if saved else 'Contraseña disponible solo durante esta sesión. No quedó guardada de forma persistente.'}
+        return {'message':'Contraseña guardada en el almacén seguro del sistema.' if saved else 'Contraseña disponible solo durante esta sesión. No quedó guardada de forma persistente.'}
 
     @app.delete('/api/credentials/{protocol}')
     def forget(protocol: str):
@@ -219,6 +220,18 @@ def create_app(root=None, start_worker=True, vault=None):
             return {'message':service.diagnostic(protocol)}
         except Exception as exc:
             raise UserError(explain(exc)) from None
+
+    @app.post('/api/quit')
+    def quit_desktop():
+        event = getattr(app.state,'exit_requested',None)
+        if event is None:
+            raise UserError('Para cerrar esta instancia usá Ctrl+C en la Terminal.')
+        if not service.operation.acquire(blocking=False):
+            raise UserError('Hay una operación en curso. Esperá a que termine antes de salir.')
+        # Keep the operation lock until process exit, preventing new mail work.
+        service.stop.set()
+        event.set()
+        return {'message':'Correo UNS se cerró. Ya podés cerrar esta pestaña.'}
 
     @app.post('/api/sync')
     def sync():

@@ -105,3 +105,20 @@ def test_attachment_remove_and_original(web):
     assert c.delete('/api/drafts/'+ident+'/attachments/0').status_code==200
     assert c.get('/api/messages/'+ident).json()['attachments']==[]
     assert c.get('/api/messages/'+ident+'/eml').headers['content-type']=='application/octet-stream'
+
+
+def test_desktop_exit_requires_idle_operation_and_csrf(web):
+    import threading
+    app,c=web
+    assert c.post('/api/quit').status_code==400
+    app.state.exit_requested=threading.Event()
+    assert 'Salir de Correo UNS' in c.get('/').text
+    assert c.post('/api/quit',headers={'X-CSRF-Token':'wrong'}).status_code==403
+    app.state.service.operation.acquire()
+    assert c.post('/api/quit').status_code==400
+    assert not app.state.exit_requested.is_set()
+    app.state.service.operation.release()
+    assert c.post('/api/quit').status_code==200
+    assert app.state.exit_requested.is_set()
+    assert app.state.service.stop.is_set()
+    assert app.state.service.operation.locked()

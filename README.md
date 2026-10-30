@@ -1,6 +1,15 @@
-# Correo UNS · versión 0.1
+# Correo UNS · versión 0.2
 
-Aplicación personal para **Windows**, Python 3.11 o superior, FastAPI y SQLite. Se ejecuta en esta PC y abre una interfaz HTML sencilla en español, con barras grises y navegación de correo clásica. No usa hosting, Gmail, servicios pagos ni IA.
+Aplicación personal para **Windows y macOS**, Python 3.11 o superior, FastAPI y SQLite. Se ejecuta en esta PC y abre una interfaz HTML sencilla en español, con barras grises y navegación de correo clásica. No usa hosting, Gmail, servicios pagos ni IA.
+
+## Iniciar en macOS
+
+**Port para macOS probado en Apple Silicon (arm64).** Conserva la interfaz en el navegador, guarda las contraseñas en el Llavero y los datos en `~/Library/Application Support/CorreoUNS`.
+
+- **Desde este repositorio:** instalá Python 3.11 o superior y abrí **`Iniciar Correo.command`** con doble clic. Prepara el entorno y descarga las dependencias automáticamente la primera vez.
+- **Aplicación autónoma:** se puede construir **Correo UNS.app**, que incluye Python y las dependencias y se abre con doble clic desde Aplicaciones. El código de construcción está incluido; el binario generado no forma parte del repositorio.
+
+Para cerrar, usá **Salir de Correo UNS** dentro de la interfaz o el menú **✉ UNS** de la barra superior. Consultá [la guía de macOS](MACOS.md) para instalación, construcción, respaldos y compatibilidad. El paquete Intel debe construirse en un Mac Intel; no se verificó en esta entrega.
 
 ## Iniciar en Windows
 
@@ -32,7 +41,7 @@ Los valores iniciales son los proporcionados por el usuario:
 
 Se intentó consultar [la referencia institucional](https://alu.uns.edu.ar/) el **29 de octubre de 2026**: devolvió un error 502 y la búsqueda no encontró el instructivo. **Estos parámetros no fueron confirmados con la UNS.** Podés editar servidores, puertos y seleccionar STARTTLS o TLS implícito. No existe modo sin cifrado ni se desactiva la validación de certificados o nombres.
 
-Introducí las contraseñas **solo en la aplicación local**, nunca en el chat. Hay campos separados para POP3 y SMTP. La casilla «Guardar en el Administrador de credenciales de Windows» usa directamente la API `CredWriteW`. Si no puede guardarse de esa manera, la aplicación informa que la contraseña queda solo en memoria hasta cerrar. Sin marcar la casilla se utiliza únicamente durante la sesión y se elimina una credencial persistente anterior para esa configuración. «Olvidar contraseña» la elimina de la sesión y del Administrador. Cambiar dirección, servidor, puerto, TLS o usuario requiere volver a introducir la credencial correspondiente.
+Introducí las contraseñas **solo en la aplicación local**, nunca en el chat. Hay campos separados para POP3 y SMTP. La casilla «Recordar contraseña en el almacén seguro del sistema» usa el Llavero de macOS o la API `CredWriteW` del Administrador de credenciales de Windows. Si no puede guardarse de esa manera, la aplicación informa que la contraseña queda solo en memoria hasta cerrar. Sin marcar la casilla se utiliza únicamente durante la sesión y se elimina una credencial persistente anterior para esa configuración. «Olvidar contraseña» la elimina de la sesión y del almacén seguro del sistema. Cambiar dirección, servidor, puerto, TLS o usuario requiere volver a introducir la credencial correspondiente.
 
 Probá **POP3 y UIDL** y **autenticación SMTP** por separado. La prueba SMTP **no envía mensajes**. Si POP3 ofrece UIDL, podés activar la actualización automática: inicialmente cada cinco minutos, únicamente mientras el proceso está abierto. Los errores espacian los reintentos hasta una hora; nunca hay un segundo intento automático de envío.
 
@@ -54,7 +63,7 @@ Si no hay UIDL, se informa la limitación y se impiden todas las descargas y la 
 
 ## Datos, respaldo y restauración
 
-Los datos reales se guardan en **`%LOCALAPPDATA%\CorreoUNS`**, separados del código:
+Los datos reales se guardan en **`%LOCALAPPDATA%\CorreoUNS`** en Windows y **`~/Library/Application Support/CorreoUNS`** en macOS, separados del código:
 
 ```text
 config.json                 Configuración sin contraseñas
@@ -73,7 +82,7 @@ Desde **Respaldo y restauración**:
 3. La carpeta activa anterior se conserva completa junto a la carpeta de datos, con un nombre como **`CorreoUNS-anterior-20261029-…`**. La interfaz muestra su ruta.
 4. Al restaurar se desactiva la actualización automática y se eliminan las credenciales asociadas a las configuraciones actual y restaurada. Volvé a introducirlas y probá las conexiones. El ZIP nunca contiene contraseñas.
 
-El correo y las copias ZIP **no están cifrados**; dependen de la protección del usuario de Windows y del disco. Protegé los respaldos como protegerías tu correo. La aplicación no genera registros de cuerpos, adjuntos ni secretos; el registro de accesos HTTP está desactivado.
+El correo y las copias ZIP **no están cifrados**; dependen de la protección del usuario del equipo y del disco. Protegé los respaldos como protegerías tu correo. La aplicación no genera registros de cuerpos, adjuntos ni secretos; el registro de accesos HTTP está desactivado.
 
 Para reconstruir manualmente un índice dañado: detené la aplicación, hacé una copia completa de la carpeta de datos y renombrá `index.sqlite3` a `index.sqlite3.anterior`. Volvé a iniciar. No borres los `.eml` ni los `.json`. Si la carpeta está dañada y la aplicación no inicia, preservala renombrándola con el programa cerrado; iniciá con una carpeta nueva y restaurá un respaldo válido.
 

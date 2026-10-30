@@ -65,3 +65,32 @@ Los errores de conexión ahora distinguen servicio y etapa (saludo, STARTTLS, US
 - Comprobar restricciones particulares de la UNS, como tamaños permitidos, cuotas o destinatarios admitidos. La aplicación nunca evita esas restricciones degradando TLS.
 
 Los límites de esta versión están documentados en README.md, especialmente los 25 MB de adjuntos por borrador y los 64 MB por carga HTTP de respaldo.
+
+
+## Port a macOS · 0.2
+
+Comprobado el 29 de octubre de 2026 en macOS 26.6.2, Apple Silicon (arm64), con Python 3.12.14.
+
+- Suite: **66 passed, 1 skipped, 1 warning**. Se omite la prueba exclusiva del Administrador de credenciales de Windows; la advertencia corresponde al cliente de pruebas de Starlette/httpx.
+- Pruebas nuevas: ubicación de datos macOS/Windows, ciclo de contraseñas del backend nativo, alternativa en memoria, guardado/lectura/eliminación de una credencial ficticia del Llavero, cierre desde el menú sin interrumpir operaciones y reinicio inmediato en el mismo puerto.
+- Aplicación autónoma construida con PyInstaller. Firma ad hoc validada con `codesign --verify --deep --strict`.
+- El ZIP final se extrajo en Aplicaciones. Se comprobó sobre ese ejecutable: arranque, recursos HTML/JS/CSS, guardado de configuración y borradores, reinicio, recuperación de una credencial ficticia del Llavero, respaldo sin contraseñas y eliminación de la credencial de prueba.
+- La interfaz del paquete se abrió en el navegador y mostró Configuración correctamente. El cierre del menú se verifica automáticamente; la inspección del menú nativo mediante accesibilidad no estuvo disponible.
+- No se inició sesión en la UNS ni se envió correo real. Las pruebas POP3/SMTP usan servidores locales simulados con TLS.
+
+La construcción se realiza en una carpeta temporal, antes de generar el ZIP, para evitar metadatos de carpetas sincronizadas que pueden interferir con la firma y el Llavero. La app debe moverse a Aplicaciones antes de usarla. El paquete arm64 no está notarizado por Apple y no se comprobó en Intel ni en versiones anteriores de macOS.
+
+
+### Corrección de TLS y salida visible
+
+- Se reprodujo un fallo local anterior a la conexión POP: faltaba `codex-rejected-cas.pem`, requerido por el módulo SSL de la distribución Python usada para empaquetar. La construcción incluye ahora ese recurso cuando el intérprete lo necesita, sin retirar su política de confianza.
+- El contexto macOS carga los certificados incluidos y no depende de rutas de certificados o depuración TLS de otro entorno.
+- Diagnósticos distinguen preparación de TLS, resolución del servidor, conexión, autenticación y UIDL. No muestran credenciales ni respuestas completas del servidor.
+- Botón **Salir de Correo UNS** dentro de la interfaz, con CSRF y protección contra cierre durante operaciones. Verificado sobre la app empaquetada.
+- Suite actualizada: **70 passed, 1 skipped, 1 warning**. Verificada la creación del contexto TLS sobre el paquete final con una conexión exclusivamente local.
+- La app instalada completó conexión y negociación TLS POP contra el servidor configurado y llegó a la solicitud de contraseña. No se pudo completar la autenticación porque la contraseña de sesión no estaba disponible después del reinicio. No se descargaron ni enviaron mensajes.
+
+
+### Confirmación de uso
+
+El usuario confirmó que la aplicación recibe y envía correctamente. Queda consultar a la UNS por la entrega desde su servidor hacia Gmail; la aceptación SMTP y la entrega final son resultados distintos. Esta confirmación no sustituye un registro de entrega del servidor universitario.

@@ -2,10 +2,12 @@ import hashlib
 import json
 import poplib
 import smtplib
+import socket
 import ssl
 import threading
 import time
 from email.utils import getaddresses
+from .tls import context as tls_context
 from .store import account, secret_key, now, atomic
 from .mime import addresses, build_message, content
 
@@ -28,7 +30,7 @@ def explain(exc):
     if isinstance(exc, UserError):
         return str(exc)
     if isinstance(exc, ssl.SSLCertVerificationError):
-        return 'El certificado TLS no es válido para este servidor. Revisá el nombre y la fecha de Windows; no se desactivó la verificación.'
+        return 'El certificado TLS no es válido para este servidor. Revisá el nombre y la fecha del equipo; no se desactivó la verificación.'
     if isinstance(exc, (poplib.error_proto, smtplib.SMTPAuthenticationError)):
         return 'El servidor rechazó la operación o la autenticación. Revisá usuario, contraseña y disponibilidad de STARTTLS.'
     if isinstance(exc, (TimeoutError, OSError, smtplib.SMTPServerDisconnected)):
@@ -41,6 +43,22 @@ def explain(exc):
 def connection_error(protocol, stage, exc):
     """Return only our text and allowlisted codes, never a raw server reply."""
     prefix = f'{protocol} · {stage}: '
+    if stage == 'preparación de certificados TLS' and isinstance(exc, OSError):
+        return prefix+'no se pudo cargar el paquete de certificados de la aplicación ('+type(exc).__name__+', código '+str(exc.errno)+', '+getattr(exc,'tls_step','preparación')+'). Volvé a abrir la aplicación.'
+    if isinstance(exc, ssl.SSLCertVerificationError):
+        return prefix+explain(exc)
+    if isinstance(exc, ssl.SSLError):
+        return prefix+'no se pudo completar la negociación TLS. Revisá el puerto y el modo de seguridad; la conexión sigue requiriendo cifrado.'
+    if isinstance(exc, socket.gaierror):
+        return prefix+'no se pudo resolver el nombre del servidor. Revisá el servidor configurado y la conexión a Internet.'
+    if isinstance(exc, TimeoutError):
+        return prefix+'el servidor no respondió dentro del tiempo de espera. Volvé a intentar más tarde.'
+    if isinstance(exc, PermissionError):
+        return prefix+'el sistema denegó el acceso necesario. Revisá los permisos de la aplicación y sus certificados.'
+    if isinstance(exc, (ConnectionResetError, ConnectionAbortedError, BrokenPipeError, EOFError)):
+        return prefix+'el servidor cerró la conexión antes de completar esta etapa. Volvé a intentar más tarde.'
+    if isinstance(exc, ConnectionRefusedError):
+        return prefix+'el servidor rechazó la conexión a ese puerto. Revisá el puerto configurado.'
     if isinstance(exc, smtplib.SMTPAuthenticationError):
         code = exc.smtp_code if isinstance(exc.smtp_code,int) and 100<=exc.smtp_code<=599 else None
         if code == 454:
@@ -89,10 +107,11 @@ class Service:
     def pop(self, config):
         if not config['address'] or not config['pop_user']:
             raise UserError('Completá la dirección de correo y el usuario POP3 en Configuración.')
-        context = ssl.create_default_context()
         client = None
-        stage = 'conexión y saludo'
+        stage = 'preparación de certificados TLS'
         try:
+            context = tls_context()
+            stage = 'conexión y saludo'
             if config['pop_tls'] == 'ssl':
                 client = poplib.POP3_SSL(config['pop_host'], config['pop_port'], timeout=25, context=context)
             else:
@@ -115,9 +134,10 @@ class Service:
         if not config['address'] or not config['smtp_user']:
             raise UserError('Completá la dirección de correo y el usuario SMTP en Configuración.')
         client = None
-        stage = 'conexión y saludo'
+        stage = 'preparación de certificados TLS'
         try:
-            context = ssl.create_default_context()
+            context = tls_context()
+            stage = 'conexión y saludo'
             if config['smtp_tls'] == 'ssl':
                 client = smtplib.SMTP_SSL(config['smtp_host'], config['smtp_port'], timeout=25, context=context)
             else:
@@ -144,6 +164,8 @@ class Service:
         except poplib.error_proto:
             self.status['uidl'] = False
             raise UserError('El servidor no ofrece UIDL. No se descargará ni se activará la actualización automática: sin identificadores estables no podemos asegurar que no haya duplicados. Usá un cliente que admita otra estrategia o consultá a la UNS.')
+        except (OSError, EOFError) as exc:
+            raise UserError(connection_error('POP3','consulta UIDL (autenticación completada)',exc)) from None
         result = []
         for row in rows:
             number, uid = row.split()

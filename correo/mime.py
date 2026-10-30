@@ -53,6 +53,9 @@ def sanitized_html(html):
 
 
 def addresses(value):
+    # Optional CC/CCO fields are empty; newer Python parsers return an empty address.
+    if not value.strip():
+        return []
     if '\r' in value or '\n' in value:
         raise ValueError('Los destinatarios no pueden contener saltos de línea.')
     result = [addr for _, addr in getaddresses([value])]

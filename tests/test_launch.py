@@ -37,3 +37,27 @@ def test_launcher_loopback_and_second_instance(tmp_path):
         assert same_port.returncode==1 and b'puerto' in same_port.stdout
     finally:
         first.terminate();first.communicate(timeout=10)
+
+
+def test_immediate_restart_same_port(tmp_path):
+    port = free_port()
+    command = [sys.executable, '-m', 'correo', '--no-browser', '--data',
+               str(tmp_path / 'restart'), '--port', str(port)]
+    for _ in range(2):
+        process = subprocess.Popen(command, stdout=subprocess.PIPE, stderr=subprocess.STDOUT)
+        try:
+            deadline = time.monotonic() + 20
+            ready = False
+            while process.poll() is None and time.monotonic() < deadline:
+                try:
+                    with urllib.request.urlopen(f'http://127.0.0.1:{port}', timeout=1) as response:
+                        ready = response.status == 200
+                    if ready:
+                        break
+                except OSError:
+                    time.sleep(.1)
+            assert ready
+        finally:
+            if process.poll() is None:
+                process.terminate()
+            process.communicate(timeout=10)

@@ -1,3 +1,16 @@
+## Correcciones de macOS
+
+- Incluye la política de certificados requerida por la distribución Python al empaquetar, corrigiendo el fallo anterior a la conexión POP.
+- Carga autónoma de certificados y diagnóstico por etapas.
+- Botón para salir desde la interfaz sin depender del menú superior.
+
+## 0.2 · macOS
+
+- Aplicación autónoma para macOS, con apertura en navegador y menú ✉ UNS para abrir/salir.
+- Contraseñas en el Llavero mediante el backend nativo, sin almacenamiento alternativo en archivos.
+- Datos en Library/Application Support/CorreoUNS, lanzador .command y construcción reproducible del paquete.
+- Compatibilidad del envío con campos CC/CCO vacíos en Python 3.12.
+
 # Cambios
 
 ## 0.1 · 2026-10-29

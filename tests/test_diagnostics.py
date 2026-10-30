@@ -35,3 +35,20 @@ def test_pop_pass_rejection_names_stage(service,monkeypatch):
     with pytest.raises(UserError,match='contraseña PASS') as result:service.pop(service.store.config())
     assert 'TLS ya se estableció' in str(result.value)
     assert 'SECRET' not in str(result.value)
+
+
+def test_uidl_timeout_identifies_authenticated_stage(service):
+    client=Mock()
+    client.uidl.side_effect=TimeoutError('PRIVATE')
+    with pytest.raises(UserError,match='consulta UIDL') as result:
+        service.uidls(client)
+    assert 'autenticación completada' in str(result.value)
+    assert 'PRIVATE' not in str(result.value)
+
+
+def test_tls_setup_failure_is_not_misreported_as_network(service,monkeypatch):
+    import ssl
+    monkeypatch.setattr('correo.service.tls_context',Mock(side_effect=PermissionError('PRIVATE')))
+    with pytest.raises(UserError,match='preparación de certificados TLS') as result:
+        service.pop(service.store.config())
+    assert 'PRIVATE' not in str(result.value)

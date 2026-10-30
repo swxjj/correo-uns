@@ -24,3 +24,7 @@ sync.json
 !.env.example
 CorreoUNS/
 messages/
+
+# Metadatos y artefactos locales de macOS.
+.DS_Store
+*.app/

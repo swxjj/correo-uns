@@ -1,0 +1,4 @@
+-r requirements.txt
+keyring>=25,<26; sys_platform == "darwin"
+rumps>=0.4,<0.5; sys_platform == "darwin"
+certifi>=2025; sys_platform == "darwin"

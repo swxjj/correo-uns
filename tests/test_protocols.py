@@ -102,7 +102,7 @@ def configure(service,vault,protocol,port,mode='starttls',host='localhost'):
 
 def trust(monkeypatch,tls_files):
     original=ssl.create_default_context
-    monkeypatch.setattr(ssl,'create_default_context',lambda:original(cafile=str(tls_files[0])))
+    monkeypatch.setattr('correo.service.tls_context',lambda:original(cafile=str(tls_files[0])))
 
 
 @pytest.mark.parametrize('mode',['starttls','ssl'])

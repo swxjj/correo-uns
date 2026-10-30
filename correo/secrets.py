@@ -1,6 +1,7 @@
-"""Windows Credential Manager only. No generic/fallback plaintext keyring."""
+"""Native credential stores only; unavailable stores fall back to memory."""
 import ctypes
 import os
+import sys
 from ctypes import wintypes
 
 
@@ -11,8 +12,17 @@ class Credential(ctypes.Structure):
 class Secrets:
     def __init__(self):
         self.session = {}
+        self.keychain = None
         self.available = os.name == 'nt'
-        if self.available:
+        if sys.platform == 'darwin':
+            try:
+                # Select the native backend explicitly, never a plaintext plugin.
+                from keyring.backends.macOS import Keyring
+                self.keychain = Keyring()
+                self.available = True
+            except (ImportError, OSError, RuntimeError):
+                pass
+        if os.name == 'nt':
             self.api = ctypes.WinDLL('Advapi32.dll', use_last_error=True)
             self.api.CredWriteW.argtypes = [ctypes.POINTER(Credential), wintypes.DWORD]
             self.api.CredWriteW.restype = wintypes.BOOL
@@ -24,6 +34,11 @@ class Secrets:
     def get(self, key):
         if key in self.session:
             return self.session[key]
+        if self.available and self.keychain is not None:
+            try:
+                return self.keychain.get_password('CorreoUNS', key)
+            except Exception:
+                return None
         if self.available:
             ptr = ctypes.POINTER(Credential)()
             if self.api.CredReadW('CorreoUNS/'+key, 1, 0, ctypes.byref(ptr)):
@@ -39,6 +54,13 @@ class Secrets:
             # Session-only must also remove an older persisted password for this target.
             self.forget_persisted(key)
             return False
+        if self.available and self.keychain is not None:
+            try:
+                self.keychain.set_password('CorreoUNS', key, password)
+                return True
+            except Exception:
+                self.forget_persisted(key)
+                return False
         if self.available:
             data = password.encode('utf-16-le')
             blob = (ctypes.c_ubyte * len(data)).from_buffer_copy(data)
@@ -49,6 +71,16 @@ class Secrets:
         return False
 
     def forget_persisted(self, key):
+        if self.available and self.keychain is not None:
+            from keyring.errors import PasswordDeleteError
+            try:
+                self.keychain.delete_password('CorreoUNS', key)
+            except PasswordDeleteError as exc:
+                from keyring.backends.macOS import api
+                if not isinstance(exc.__cause__, api.NotFound):
+                    # Never claim a persisted credential was forgotten if access was denied.
+                    raise
+            return
         if self.available:
             self.api.CredDeleteW('CorreoUNS/'+key, 1, 0)
 
