@@ -5,11 +5,12 @@ import zipfile
 
 if __name__=='__main__':
     root=Path(__file__).resolve().parent.parent
-    output=root/'output'/'CorreoUNS-v0.2.zip'
+    output=root/'output'/'CorreoUNS-v0.3-beta.zip'
     output.parent.mkdir(exist_ok=True)
-    files=[root/name for name in ('README.md','VERIFICACION.md','CHANGELOG.md','requirements.txt','requirements-lock.txt','requirements-dev.txt','Instalar.cmd','Iniciar Correo.cmd','Iniciar Correo.command','requirements-macos.txt','requirements-build-macos.txt','MACOS.md','.gitignore')]
+    files=[root/name for name in ('README.md','VERIFICACION.md','CHANGELOG.md','WEB-BETA.md','requirements.txt','requirements-lock.txt','requirements-dev.txt','Instalar.cmd','Iniciar Correo.cmd','Iniciar Beta Web.cmd','Iniciar Beta Internet.cmd','Iniciar Correo.command','requirements-macos.txt','requirements-build-macos.txt','MACOS.md','.gitignore')]
     for folder in ('correo','tests','tools'):
         files.extend(p for p in (root/folder).rglob('*') if p.is_file() and '__pycache__' not in p.parts and p.suffix in ('.py','.html','.js','.css'))
+    files.extend(p for p in (root/'deploy'/'vercel').rglob('*') if p.is_file() and p.suffix in ('.html','.json','.txt') and '.vercel' not in p.parts)
     with zipfile.ZipFile(output,'w',zipfile.ZIP_DEFLATED) as z:
         for path in sorted(files):
             z.write(path,'CorreoUNS/'+path.relative_to(root).as_posix())

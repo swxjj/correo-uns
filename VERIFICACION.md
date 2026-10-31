@@ -1,4 +1,27 @@
-# Verificación de la versión 0.1
+# Verificación de Correo UNS
+
+## Beta web de Windows · 0.3 · 2026-10-31
+
+Resultado: **99 pruebas aprobadas, 3 omitidas** por dependencias específicas de macOS/keyring, y una advertencia de deprecación del cliente de pruebas de Starlette. Se verificaron también compilación Python, sintaxis de ambos scripts de navegador y ausencia de errores de whitespace en el diff.
+
+Las nuevas comprobaciones cubren:
+
+- Acceso privado a mensajes, originales, HTML, adjuntos, estado y respaldos; el token antiguo del modo local no permite omitir el login.
+- Login de una sola cuenta, apellido/LU normalizados, rechazo de otras cuentas antes de contactar a la UNS y límite de intentos independiente de la cookie de preingreso.
+- Autenticación POP3 y SMTP en paralelo con sockets TLS locales reales, sin RETR, MAIL ni DATA durante el login.
+- POP3 fallido sin sesión; SMTP fallido con lectura y borradores pero sin envío.
+- Cookies Secure/HttpOnly/SameSite, token CSRF único por sesión, comprobación de Origin y Host, rechazo de bootstrap reutilizado, vencimiento por inactividad y absoluto, revocación al cerrar sesión y reiniciar.
+- Contraseña de login solo en memoria y conservación independiente de credenciales previamente guardadas en el almacén del sistema.
+- Bloqueo remoto de cambios de cuenta/servidores, credenciales, restauración y cierre del proceso.
+- Generación de un despliegue mínimo del proxy, validación de su destino y eliminación del index local que impediría reenviar la raíz al backend, conservando el enlace local de Vercel.
+
+Se recorrió la demo web en Chromium: ingreso ficticio, lectura, descarga de adjunto, responder a todos, edición y guardado de borrador, envío contra simulador y cierre de sesión. Se inspeccionaron capturas del login a 1019 px y 390 px. No se enviaron correos reales.
+
+Se creó y publicó el proyecto **correo-uns-beta** en Vercel con solo dos archivos de proxy, conectado mediante un Quick Tunnel al backend autenticado de Windows. Se comprobó desde **https://correo-uns-beta.vercel.app**: HTTP 200 del login, cookie de preingreso Secure/HttpOnly, instrucciones no-store, HTTP 401 para correo y respaldo sin sesión, y HTTP 403 ante origen externo o token CSRF ausente. Estas comprobaciones públicas no intentaron autenticar la cuenta real ni leer sus mensajes. La prueba real de ingreso queda a cargo del propietario mediante el formulario local o HTTPS.
+
+Los errores de enrutamiento encontrados durante la publicación (prioridad de un index estático y coincidencia de la ruta raíz) se corrigieron antes de esta verificación. Los procesos reales del backend y túnel quedan ejecutándose para la beta; el servidor y el navegador de demostración se detienen al terminar. Ver **WEB-BETA.md** para las limitaciones del túnel temporal y su republicación después de cada reinicio.
+
+## Primera versión local · 0.1
 
 Fecha: **29 de octubre de 2026**. Entorno: **Windows, Python 3.11.9**.
 

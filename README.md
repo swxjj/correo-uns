@@ -1,6 +1,12 @@
-# Correo UNS · versión 0.2
+# Correo UNS · versión 0.3 beta
 
-Aplicación personal para **Windows y macOS**, Python 3.11 o superior, FastAPI y SQLite. Se ejecuta en esta PC y abre una interfaz HTML sencilla en español, con barras grises y navegación de correo clásica. No usa hosting, Gmail, servicios pagos ni IA.
+Aplicación personal para **Windows y macOS**, Python 3.11 o superior, FastAPI y SQLite. Se ejecuta en esta PC y abre una interfaz HTML sencilla en español, con barras grises y navegación de correo clásica. El modo local no requiere hosting ni servicios pagos. No tiene integración con Gmail ni funciones de IA.
+
+## Beta web de Windows
+
+La beta permite ingresar desde Internet mediante Vercel y un túnel HTTPS hacia la PC del propietario. Usa apellido, LU y contraseña institucional, verifica POP3 y SMTP sin enviar mensajes, y mantiene el archivo en Windows. Por ahora admite únicamente la cuenta configurada. El modo local y el port de macOS se conservan.
+
+Consultá **[WEB-BETA.md](WEB-BETA.md)** para acceder, iniciar, detener y actualizar el túnel. La URL actual es **https://correo-uns-beta.vercel.app**. Vercel y Cloudflare intervienen en el transporte; no alojan el archivo SQLite ni los originales. El túnel temporal debe actualizarse en Vercel cada vez que se reinicia.
 
 ## Iniciar en macOS
 
@@ -26,7 +32,7 @@ En otra PC o después de extraer el paquete de distribución:
 3. Ejecutá **`Instalar.cmd`** una vez. Necesita Internet para descargar las bibliotecas gratuitas desde PyPI.
 4. Ejecutá **`Iniciar Correo.cmd`**. Podés crear un acceso directo a ese archivo desde el Explorador de Windows.
 
-No se requiere ejecutar como administrador. No hay un ejecutable `.exe` empaquetado en esta primera versión. Una segunda instancia se rechaza mediante el puerto y un bloqueo del archivo local. No cambies la dirección de escucha ni la publiques en una red.
+No se requiere ejecutar como administrador. No hay un ejecutable `.exe` empaquetado para Windows en esta versión. Una segunda instancia se rechaza mediante el puerto y un bloqueo del archivo local. El modo local no debe publicarse en una red; para acceso remoto usá exclusivamente la beta con login descrita en WEB-BETA.md.
 
 ## Configurar la cuenta
 

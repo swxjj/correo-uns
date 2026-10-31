@@ -13,6 +13,18 @@
 
 # Cambios
 
+## 0.3 beta · 2026-10-31
+
+- Login para la cuenta propietaria con apellido, LU y contraseña institucional.
+- Comprobación paralela de autenticación POP3 y SMTP; lectura y borradores disponibles si falla solamente SMTP, con envío bloqueado.
+- Cookies seguras, sesiones en memoria con vencimiento absoluto e inactividad, CSRF por sesión, límite global de intentos y cierre de sesión con revocación.
+- Protección de todas las operaciones y archivos privados; administración de cuenta y restauraciones reservadas al modo local.
+- Formulario de ingreso con el estilo clásico existente y controles de cierre de sesión y recuperación ante vencimiento.
+- Supervisor de Windows que verifica el backend con login antes de abrir un túnel HTTPS y detiene ambos procesos conjuntamente.
+- Despliegue mínimo de Vercel como proxy, sin incluir el código Python, credenciales, SQLite o mensajes.
+- Demostración de login aislada, pruebas adicionales y documentación de operación de la beta.
+- Se conservan los cambios del port de macOS incorporados desde GitHub; la beta remota se verifica primero en Windows.
+
 ## 0.1 · 2026-10-29
 
 - Cliente personal local para Windows, con FastAPI, SQLite y HTML en español.
