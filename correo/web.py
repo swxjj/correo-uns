@@ -17,6 +17,7 @@ from .secrets import Secrets
 from .paths import data_root
 from .service import Service, UserError, explain
 from .mime import content, sanitized_html, build_message, addresses, safe_name
+from .auth import Auth, OverlayVault, WebSettings, COOKIE, PRE_COOKIE, MAX_SECONDS
 
 MAX_REQUEST = 64*1024*1024
 ASSETS = Path(__file__).parent/'static'
@@ -97,12 +98,25 @@ class Flags(BaseModel):
     archived: bool | None = None
 
 
-def create_app(root=None, start_worker=True, vault=None):
+class Login(BaseModel):
+    model_config = ConfigDict(extra='forbid')
+    surname: str = Field(min_length=1,max_length=80)
+    lu: str = Field(min_length=1,max_length=12)
+    password: str = Field(min_length=1,max_length=1000)
+
+
+def create_app(root=None, start_worker=True, vault=None, web: WebSettings | None=None):
     root = root or data_root()
     store = Store(root)
     vault = vault or Secrets()
+    if web:
+        cfg=store.config()
+        if not cfg['address'].endswith('@alu.uns.edu.ar') or any(cfg[p+'_user']!=cfg['address'] for p in ('pop','smtp')):
+            raise ValueError('Configurá primero la cuenta propietaria y ambos usuarios con la dirección institucional completa en el modo local.')
+        vault=OverlayVault(vault)
     service = Service(store,vault)
     token = random_secrets.token_urlsafe(32)
+    auth=Auth(store,vault,web) if web else None
 
     @asynccontextmanager
     async def lifespan(app):
@@ -113,34 +127,58 @@ def create_app(root=None, start_worker=True, vault=None):
 
     app = FastAPI(title='Correo UNS local',docs_url=None,redoc_url=None,openapi_url=None,lifespan=lifespan)
     app.state.store,app.state.service,app.state.token,app.state.vault = store,service,token,vault
+    app.state.auth=auth
+
+    def secured(response):
+        response.headers.update({'Cache-Control':'no-store, private' if web else 'no-store','CDN-Cache-Control':'no-store','Vercel-CDN-Cache-Control':'no-store','X-Content-Type-Options':'nosniff','Referrer-Policy':'no-referrer','X-Frame-Options':'DENY','Cross-Origin-Resource-Policy':'same-origin','Content-Security-Policy':"default-src 'none'; script-src 'self'; style-src 'self'; connect-src 'self'; img-src 'self'; frame-src 'self'; form-action 'none'; base-uri 'none'; frame-ancestors 'none'"})
+        if web and web.secure:response.headers['Strict-Transport-Security']='max-age=31536000'
+        return response
 
     @app.middleware('http')
     async def protect(request, call_next):
         host = request.headers.get('host','')
-        if not re.fullmatch(r'127\.0\.0\.1(?::[0-9]{1,5})?',host):
-            return Response('Solo se permite 127.0.0.1.',status_code=403)
+        if not (web.host_allowed(host) if web else re.fullmatch(r'127\.0\.0\.1(?::[0-9]{1,5})?',host)):
+            return secured(Response('Host no permitido.',status_code=403))
         origin = request.headers.get('origin')
-        if origin and origin != 'http://'+host:
-            return Response('Origen no permitido.',status_code=403)
-        if request.headers.get('sec-fetch-site') not in (None,'none','same-origin'):
-            return Response('Solicitud externa bloqueada.',status_code=403)
-        if request.url.path.startswith('/api/') and not random_secrets.compare_digest(request.headers.get('x-csrf-token',''),token):
-            return Response('Sesión inválida. Recargá la aplicación.',status_code=403)
+        expected=web.origin if web else 'http://'+host
+        if (origin and origin!=expected) or (web and request.method not in ('GET','HEAD') and origin!=expected):
+            return secured(Response('Origen no permitido.',status_code=403))
+        external_navigation=bool(web and request.method=='GET' and request.url.path=='/' and request.headers.get('sec-fetch-mode')=='navigate' and request.headers.get('sec-fetch-dest')=='document')
+        if request.headers.get('sec-fetch-site') not in (None,'none','same-origin') and not external_navigation:
+            return secured(Response('Solicitud externa bloqueada.',status_code=403))
+        if request.url.path.startswith('/api/'):
+            csrf=request.headers.get('x-csrf-token','')
+            if web:
+                if request.url.path=='/api/auth/login':
+                    if not auth.login_csrf(request.cookies.get(PRE_COOKIE),csrf):
+                        return secured(JSONResponse({'detail':'Recargá la página de ingreso antes de volver a intentar.'},status_code=403))
+                else:
+                    session=auth.session(request.cookies.get(COOKIE),touch=request.url.path not in ('/api/status','/api/auth/me'))
+                    if not session:return secured(JSONResponse({'detail':'Tu sesión terminó. Volvé a ingresar.'},status_code=401))
+                    if not csrf.isascii() or not random_secrets.compare_digest(csrf,session['csrf']):return secured(JSONResponse({'detail':'Token de sesión inválido. Recargá la página.'},status_code=403))
+                    if request.url.path.endswith('/send') and not session['smtp']:
+                        return secured(JSONResponse({'detail':session['warning']},status_code=403))
+                    if request.url.path=='/api/restore' or request.url.path=='/api/quit' or (request.url.path.startswith('/api/credentials/') and request.method!='GET'):
+                        return secured(JSONResponse({'detail':'Esta operación se administra únicamente en el modo local de Windows.'},status_code=403))
+            elif not random_secrets.compare_digest(csrf,token):
+                return secured(Response('Sesión inválida. Recargá la aplicación.',status_code=403))
         if request.method not in ('GET','HEAD'):
             chunks, size = [], 0
             async for chunk in request.stream():
                 size += len(chunk)
-                if size>MAX_REQUEST:
-                    return Response('El archivo o solicitud supera 64 MB.',status_code=413)
+                limit=8192 if request.url.path=='/api/auth/login' else MAX_REQUEST
+                if size>limit:
+                    return secured(Response('El archivo o solicitud supera el límite permitido.',status_code=413))
                 chunks.append(chunk)
             request._body = b''.join(chunks)
         response = await call_next(request)
-        response.headers.update({'Cache-Control':'no-store','X-Content-Type-Options':'nosniff','Referrer-Policy':'no-referrer','X-Frame-Options':'DENY','Cross-Origin-Resource-Policy':'same-origin','Content-Security-Policy':"default-src 'none'; script-src 'self'; style-src 'self'; connect-src 'self'; img-src 'self'; frame-src 'self'; form-action 'none'; base-uri 'none'; frame-ancestors 'none'"})
-        return response
+        return secured(response)
 
     @app.exception_handler(RequestValidationError)
     async def validation(request,exc):
         # Pydantic's default response echoes submitted input (including passwords).
+        if request.url.path=='/api/auth/login':
+            return JSONResponse({'detail':'Completá apellido, LU y contraseña con los límites indicados en el formulario.'},status_code=422)
         return JSONResponse({'detail':'Revisá los campos: direcciones completas, puertos de 1 a 65535, TLS seguro e intervalo de 1 a 1440 minutos.'},status_code=422)
 
     @app.exception_handler(Exception)
@@ -160,8 +198,49 @@ def create_app(root=None, start_worker=True, vault=None):
         return JSONResponse({'detail':'No se encontró el mensaje o el archivo solicitado.'},status_code=404)
 
     @app.get('/',response_class=HTMLResponse)
-    def home():
-        return (ASSETS/'index.html').read_text('utf-8').replace('__CSRF__',token).replace('__QUIT_BUTTON__', '<button id="quit">Salir de Correo UNS</button>' if hasattr(app.state,'exit_requested') else '')
+    def home(request: Request):
+        csrf=token
+        if web:
+            session=auth.session(request.cookies.get(COOKIE))
+            if not session:
+                raw,entry=auth.bootstrap()
+                response=HTMLResponse((ASSETS/'login.html').read_text('utf-8').replace('__CSRF__',entry['csrf']))
+                response.set_cookie(PRE_COOKIE,raw,httponly=True,secure=web.secure,samesite='strict',max_age=600,path='/api/auth')
+                return response
+            csrf=session['csrf']
+        return HTMLResponse((ASSETS/'index.html').read_text('utf-8').replace('__CSRF__',csrf).replace('__QUIT_BUTTON__', '<button id="quit">Salir de Correo UNS</button>' if hasattr(app.state,'exit_requested') else '').replace('__LOGOUT_BUTTON__','<button id="logout">Cerrar sesión</button>' if web else ''))
+
+    @app.get('/login.js')
+    def login_js():
+        return Response((ASSETS/'login.js').read_text('utf-8'),media_type='text/javascript')
+
+    @app.post('/api/auth/login')
+    def login(value: Login,request: Request):
+        if not auth:raise HTTPException(404)
+        if not service.operation.acquire(blocking=False):return JSONResponse({'detail':'Hay una operación de correo en curso. Esperá a que termine antes de ingresar.'},status_code=429)
+        try:result,code,message=auth.login(value.surname,value.lu,value.password,request.cookies.get(COOKIE,''))
+        finally:service.operation.release()
+        if not result:return JSONResponse({'detail':message},status_code=code,headers={'Retry-After':'300'} if code==429 else {})
+        raw,entry=result
+        response=JSONResponse({'message':'Ingreso correcto.','smtp_available':entry['smtp'],'warning':entry['warning']})
+        response.set_cookie(COOKIE,raw,httponly=True,secure=web.secure,samesite='strict',max_age=MAX_SECONDS,path='/')
+        response.delete_cookie(PRE_COOKIE,path='/api/auth',secure=web.secure,httponly=True,samesite='strict')
+        with auth.lock:auth.pre.pop(auth.digest(request.cookies.get(PRE_COOKIE,'')),None)
+        return response
+
+    @app.get('/api/auth/me')
+    def me(request: Request):
+        if not auth:return {'enabled':False}
+        session=auth.session(request.cookies.get(COOKIE),touch=False)
+        return {'enabled':True,'smtp_available':session['smtp'],'warning':session['warning']}
+
+    @app.post('/api/auth/logout')
+    def logout(request: Request):
+        if not auth:raise HTTPException(404)
+        auth.logout(request.cookies.get(COOKIE))
+        response=JSONResponse({'message':'Sesión cerrada.'})
+        response.delete_cookie(COOKIE,path='/',secure=web.secure,httponly=True,samesite='strict')
+        return response
 
     @app.get('/app.js')
     def js():
@@ -178,7 +257,7 @@ def create_app(root=None, start_worker=True, vault=None):
     @app.get('/api/config')
     def config():
         cfg = store.config()
-        return dict(config=cfg,credentials={p:bool(vault.get(secret_key(cfg,p))) for p in ('pop','smtp')},data_folder=str(store.root))
+        return dict(config=cfg,credentials={p:bool(vault.get(secret_key(cfg,p))) for p in ('pop','smtp')},data_folder='Archivo privado en la PC del servidor' if web else str(store.root),web_mode=bool(web))
 
     @app.put('/api/config')
     def save_config(cfg: Config):
@@ -187,6 +266,8 @@ def create_app(root=None, start_worker=True, vault=None):
         try:
             old = store.config()
             value = cfg.model_dump()
+            if web and any(value[k]!=old[k] for k in value if k not in ('display_name','auto','interval')):
+                raise UserError('La cuenta y los servidores se administran únicamente desde el modo local de Windows.')
             changed = any(old[k]!=value[k] for k in ('address','pop_host','pop_port','pop_tls','pop_user'))
             if cfg.auto and (changed or service.status['uidl'] is not True):
                 raise UserError('Primero guardá sin actualización automática y ejecutá Probar POP3 para verificar UIDL. Después podés activar la actualización automática.')

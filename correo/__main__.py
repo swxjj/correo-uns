@@ -8,6 +8,7 @@ import webbrowser
 import uvicorn
 from .web import create_app
 from .paths import data_root
+from .auth import WebSettings
 
 
 def main():
@@ -16,7 +17,14 @@ def main():
     parser.add_argument('--port',type=int,default=8765)
     parser.add_argument('--no-browser',action='store_true')
     parser.add_argument('--desktop',action='store_true',help='Aplicación de barra de menús en macOS')
+    parser.add_argument('--web',action='store_true',help='Beta web con login obligatorio para la cuenta configurada')
+    parser.add_argument('--origin',help='Origen público HTTPS exacto (sin ruta) para la beta web')
+    parser.add_argument('--tunnel-host',default='',help='Host exacto del Quick Tunnel de esta sesión')
     args = parser.parse_args()
+    if (args.origin or args.tunnel_host) and not args.web:parser.error('--origin y --tunnel-host requieren --web')
+    if args.desktop and args.web:parser.error('--desktop y --web son modos separados')
+    try:web=WebSettings(args.origin or f'http://127.0.0.1:{args.port}',args.tunnel_host) if args.web else None
+    except ValueError as exc:parser.error(str(exc))
     def failure(message):
         print(message)
         if args.desktop:
@@ -55,7 +63,9 @@ def main():
         failure('El archivo local ya está abierto por otra instancia. Cerrala antes de continuar.')
         sock.close(); lock.close()
         return 1
-    app = create_app(root)
+    try:app = create_app(root,web=web)
+    except ValueError as exc:
+        failure(str(exc));sock.close();lock.close();return 1
     config = uvicorn.Config(app,host='127.0.0.1',port=args.port,access_log=False,log_level='critical',proxy_headers=False,log_config=None)
     server = uvicorn.Server(config)
     if not args.no_browser and not args.desktop:
@@ -63,9 +73,10 @@ def main():
             while not server.started and not server.should_exit:
                 time.sleep(.2)
             if server.started:
-                webbrowser.open(f'http://127.0.0.1:{args.port}')
+                webbrowser.open(web.origin if web else f'http://127.0.0.1:{args.port}')
         threading.Thread(target=open_browser,daemon=True).start()
     print(f'Correo UNS: http://127.0.0.1:{args.port}\nDatos: {root}\nMantené esta ventana abierta. Para salir, presioná Ctrl+C.')
+    if web:print('Beta con login · Dirección de acceso: '+web.origin)
     try:
         if args.desktop:
             from .desktop import run

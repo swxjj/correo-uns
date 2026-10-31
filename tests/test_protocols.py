@@ -168,3 +168,23 @@ def test_uncertain_real_socket_disconnect(service,vault,tls_files,sample,monkeyp
         assert result['state']=='uncertain' and len(state['data'])==1
         with pytest.raises(UserError):service.send(saved['id'])
         assert len(state['data'])==1
+
+
+def test_web_login_checks_real_pop_and_smtp_tls_without_mail(service,vault,tls_files,sample,monkeypatch):
+    from fastapi.testclient import TestClient
+    from correo.auth import WebSettings
+    from correo.web import create_app
+    import re
+    trust(monkeypatch,tls_files)
+    with server('pop',tls_files,sample) as (pop_port,pop_state), server('smtp',tls_files,sample) as (smtp_port,smtp_state):
+        cfg=service.store.config();cfg.update(address='perez.123@alu.uns.edu.ar',pop_user='perez.123@alu.uns.edu.ar',smtp_user='perez.123@alu.uns.edu.ar',pop_host='localhost',pop_port=pop_port,smtp_host='localhost',smtp_port=smtp_port)
+        service.store.save_config(cfg)
+        origin='https://web.example.test'
+        app=create_app(service.store.root,start_worker=False,vault=vault,web=WebSettings(origin))
+        with TestClient(app,base_url=origin) as client:
+            html=client.get('/').text;csrf=re.search('name="csrf-token" content="([^"]+)"',html).group(1)
+            result=client.post('/api/auth/login',headers={'Origin':origin,'X-CSRF-Token':csrf},json={'surname':'perez','lu':'123','password':'ficticia'})
+            assert result.status_code==200 and result.json()['smtp_available']
+        assert 'PASS' in pop_state['commands'] and 'AUTH' in smtp_state['commands']
+        assert 'RETR' not in pop_state['commands'] and 'DELE' not in pop_state['commands']
+        assert not smtp_state['data'] and 'MAIL' not in smtp_state['commands']
