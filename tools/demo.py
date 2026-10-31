@@ -3,8 +3,10 @@ from email.message import EmailMessage
 from email import policy
 from pathlib import Path
 import uvicorn
+import argparse
 from correo.web import create_app
-from correo.store import DEFAULT
+from correo.store import DEFAULT, Store
+from correo.auth import WebSettings
 
 
 class MemoryVault:
@@ -14,10 +16,14 @@ class MemoryVault:
     def forget(self,k): self.session.pop(k,None)
 
 
-def make_app():
-    app=create_app(Path('output/demo-data').resolve(),start_worker=False,vault=MemoryVault())
+def make_app(web=False,port=8876):
+    root=Path('output/demo-beta' if web else 'output/demo-data').resolve()
+    address='perez.123456@alu.uns.edu.ar' if web else 'alumno@alu.uns.edu.ar'
+    cfg={**DEFAULT,'address':address,'display_name':'Estudiante de prueba','pop_user':address,'smtp_user':address}
+    Store(root).save_config(cfg)
+    app=create_app(root,start_worker=False,vault=MemoryVault(),web=WebSettings(f'http://127.0.0.1:{port}') if web else None)
     store=app.state.store
-    store.save_config({**DEFAULT,'address':'alumno@alu.uns.edu.ar','display_name':'Estudiante de prueba','pop_user':'alumno@alu.uns.edu.ar','smtp_user':'alumno@alu.uns.edu.ar'})
+    if web:app.state.auth.probe=lambda protocol,cfg,password:(password=='demo-correo','')
     message=EmailMessage(policy=policy.SMTP)
     message['From']='Cátedra de Física <fisica@example.test>'
     message['To']='alumno@alu.uns.edu.ar'
@@ -48,6 +54,7 @@ def make_app():
         if request.url.path=='/':
             body=b''.join([chunk async for chunk in response.body_iterator])
             body=body.replace('Archivo personal · En esta PC'.encode(),'DEMOSTRACIÓN · Sin correo real'.encode())
+            body=body.replace('Beta privada'.encode(),'DEMOSTRACIÓN · Sin correo real'.encode())
             from fastapi.responses import Response
             headers=dict(response.headers);headers.pop('content-length',None)
             return Response(body,headers=headers,media_type='text/html')
@@ -56,5 +63,7 @@ def make_app():
 
 
 if __name__=='__main__':
-    print('DEMOSTRACIÓN: todos los accesos POP3 y SMTP están simulados. http://127.0.0.1:8876')
-    uvicorn.run(make_app(),host='127.0.0.1',port=8876,access_log=False,log_level='critical',proxy_headers=False)
+    parser=argparse.ArgumentParser();parser.add_argument('--web',action='store_true');parser.add_argument('--port',type=int,default=8876);args=parser.parse_args()
+    print(f'DEMOSTRACIÓN: POP3 y SMTP simulados. http://127.0.0.1:{args.port}',flush=True)
+    if args.web:print('Login ficticio: apellido perez · LU 123456 · contraseña demo-correo',flush=True)
+    uvicorn.run(make_app(args.web,args.port),host='127.0.0.1',port=args.port,access_log=False,log_level='critical',proxy_headers=False)

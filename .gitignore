@@ -3,6 +3,8 @@ __pycache__/
 .pytest_cache/
 output/
 .playwright-cli/
+.vercel/
+node_modules/
 *.pyc
 
 # Datos personales y archivos generados: nunca se publican.

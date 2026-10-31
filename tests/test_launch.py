@@ -6,6 +6,7 @@ import subprocess
 import sys
 import time
 import urllib.request
+from tools.start_web_beta import stop_process
 
 
 def free_port():
@@ -36,7 +37,7 @@ def test_launcher_loopback_and_second_instance(tmp_path):
         same_port=subprocess.run(command+['--port',str(first_port)],capture_output=True,timeout=15)
         assert same_port.returncode==1 and b'puerto' in same_port.stdout
     finally:
-        first.terminate();first.communicate(timeout=10)
+        stop_process(first);first.communicate(timeout=10)
 
 
 def test_immediate_restart_same_port(tmp_path):
@@ -59,5 +60,5 @@ def test_immediate_restart_same_port(tmp_path):
             assert ready
         finally:
             if process.poll() is None:
-                process.terminate()
+                stop_process(process)
             process.communicate(timeout=10)
