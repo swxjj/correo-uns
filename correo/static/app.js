@@ -33,6 +33,22 @@ async function openMessage(id){
   await leave();const msg=await api('messages/'+id);if(msg.info.folder==='drafts'){await compose(msg);return;}
   current=msg;page='message';if(msg.info.unread)await api('messages/'+id,{method:'PATCH',body:{unread:false}});
   main.innerHTML=`<article class="document"><div class="actions"><button id="back">Volver</button><button id="reply">Responder</button><button id="reply-all">Responder a todos</button><button id="star">${msg.info.starred?'Quitar destacado':'Destacar'}</button><button id="archive">${msg.info.archived?'Volver a Entrada':'Archivar localmente'}</button><button id="unread">Marcar no leído</button></div>${msg.info.state?`<p class="note">${esc(states[msg.info.state]||msg.info.state)}. ${msg.info.state==='accepted'?'La aceptación por SMTP no confirma la entrega final.':msg.info.state==='uncertain'?'No reenvíes sin comprobar el resultado.':''}</p>`:''}<div class="message-head"><h2>${esc(msg.subject)}</h2><dl><dt>De:</dt><dd>${esc(msg.sender)}</dd><dt>Para:</dt><dd>${esc(msg.to)}</dd>${msg.cc?`<dt>CC:</dt><dd>${esc(msg.cc)}</dd>`:''}${msg.info.bcc?`<dt>CCO local:</dt><dd>${esc(msg.info.bcc)}</dd>`:''}<dt>Fecha:</dt><dd>${esc(msg.date)}</dd></dl></div><div class="actions"><button id="original">Guardar original .eml</button>${msg.has_html?'<button id="html">Ver HTML aislado (sin imágenes externas)</button>':''}</div><div id="body-view"><pre class="body">${esc(msg.body)}</pre></div><section class="attachments"><h3>Adjuntos (${msg.attachments.length})</h3><ul>${msg.attachments.map(a=>`<li><button data-download="${a.index}">${esc(a.name)}</button> <span class="muted">${Math.ceil(a.size/1024)} KB</span></li>`).join('')||'<li>Sin adjuntos.</li>'}</ul><p class="muted">Los adjuntos se guardan mediante el navegador. No se abren automáticamente.</p></section></article>`;
+  if(msg.links?.length){
+    const section=document.createElement('section');section.className='message-links';
+    const heading=document.createElement('h3');heading.textContent='Enlaces del mensaje';section.append(heading);
+    const note=document.createElement('p');note.className='muted';note.textContent='Se abren solo cuando hacés clic, en otra pestaña. Revisá el dominio de destino antes de ingresar datos.';section.append(note);
+    const links=document.createElement('ul');
+    for(const link of msg.links){
+      // Defense in depth: only absolute web URLs can leave the isolated message.
+      let url;try{url=new URL(link.url);}catch{continue;}
+      if(!['https:','http:'].includes(url.protocol)||url.username||url.password)continue;
+      const item=document.createElement('li');const a=document.createElement('a');
+      a.href=link.url;a.textContent=link.label;a.target='_blank';a.rel='noopener noreferrer';a.referrerPolicy='no-referrer';a.title=link.url;
+      const host=document.createElement('span');host.className='muted';host.textContent=' · '+url.host;
+      item.append(a,host);links.append(item);
+    }
+    section.append(links);$('#body-view').after(section);
+  }
   $('#back').onclick=()=>action(()=>list());
   $('#reply').onclick=()=>action(()=>reply(id,false));$('#reply-all').onclick=()=>action(()=>reply(id,true));
   $('#star').onclick=()=>action(async()=>{await api('messages/'+id,{method:'PATCH',body:{starred:!msg.info.starred}});await openMessage(id);});

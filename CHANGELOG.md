@@ -13,6 +13,12 @@
 
 # Cambios
 
+## Enlaces de mensajes · 2026-11-01
+
+- Lista de enlaces HTTP/HTTPS fuera del HTML aislado, con dominio visible y apertura explícita en otra pestaña sin referer ni acceso a la ventana original.
+- Corrección de mensajes con alternativa de texto vacía: se muestra la indicación para abrir HTML y sus enlaces.
+- Los destinos de verificación se conservan sin visitarlos; scripts, imágenes remotas y navegación dentro del HTML siguen bloqueados.
+
 ## 0.4 beta · 2026-11-01
 
 - Acceso por invitación local, sin registro público y sin incluir cuentas reales en el repositorio.

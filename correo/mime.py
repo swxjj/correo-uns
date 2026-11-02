@@ -4,6 +4,8 @@ from email.parser import BytesParser
 from email.message import EmailMessage
 from email.utils import getaddresses, formataddr, make_msgid, formatdate
 import bleach
+from html.parser import HTMLParser
+from urllib.parse import urlsplit
 
 
 def parse(raw):
@@ -50,6 +52,62 @@ def metadata(raw):
 def sanitized_html(html):
     # No URLs, CSS, images, forms, SVG or active elements. The iframe also has a CSP and empty sandbox.
     return bleach.clean(html, tags=['p','br','div','span','b','strong','i','em','u','s','blockquote','pre','code','ul','ol','li','table','thead','tbody','tr','th','td','h1','h2','h3','hr','a'], attributes={'a':['title']}, protocols=[], strip=True)
+
+
+def message_links(plain, html):
+    """Extract explicit web links without visiting them or relaxing the HTML sandbox."""
+    links, seen = [], set()
+
+    def add(url, label=''):
+        url = url.strip()
+        if not url or re.search(r'[\s\x00-\x1f\x7f\\]', url): return
+        try:
+            parsed = urlsplit(url)
+            if parsed.scheme.lower() not in ('https', 'http') or not parsed.hostname or parsed.username is not None or parsed.password is not None: return
+            parsed.port  # Reject invalid ports before handing the URL to a browser.
+            host = parsed.hostname.encode('idna').decode('ascii')
+            if not re.fullmatch(r'[a-zA-Z0-9.:-]+', host): return
+        except (ValueError, UnicodeError): return
+        if url in seen: return
+        seen.add(url)
+        links.append({'url': url, 'label': ' '.join(label.split())[:200] or 'Abrir enlace', 'host': host})
+
+    class Parser(HTMLParser):
+        def __init__(self):
+            super().__init__(convert_charrefs=True)
+            self.blocked = []
+            self.url, self.words = None, []
+
+        def handle_starttag(self, tag, attrs):
+            if tag in ('script', 'style', 'head', 'template', 'svg', 'math', 'iframe', 'object'):
+                self.blocked.append(tag)
+            if self.blocked: return
+            attrs = dict(attrs)
+            if tag == 'a':
+                self.finish()
+                self.url, self.words = attrs.get('href'), []
+            elif tag == 'img' and self.url:
+                self.words.append(attrs.get('alt', ''))
+
+        def handle_endtag(self, tag):
+            if self.blocked:
+                if tag == self.blocked[-1]: self.blocked.pop()
+                return
+            if tag == 'a': self.finish()
+
+        def handle_data(self, data):
+            if self.url and not self.blocked: self.words.append(data)
+
+        def finish(self):
+            if self.url: add(self.url, ''.join(self.words))
+            self.url, self.words = None, []
+
+    parser = Parser()
+    parser.feed(html)
+    parser.finish()
+    for match in re.finditer(r'https?://[^\s<>"\x00-\x1f\x7f]+', plain, re.IGNORECASE):
+        add(match.group().rstrip('.,;!'))
+    return links
 
 
 def addresses(value):

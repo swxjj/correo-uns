@@ -1,5 +1,11 @@
 # Verificación de Correo UNS
 
+## Enlaces de verificación · 2026-11-01
+
+Resultado: **141 pruebas aprobadas y 3 omitidas**, con la misma advertencia de deprecación de Starlette. Se agregaron 14 casos de extracción de enlaces: preservación exacta del token HTML y sus parámetros, entidades, deduplicación, texto plano, imágenes con texto alternativo, exclusión de recursos de seguimiento y rechazo de esquemas activos, rutas locales, credenciales embebidas, puertos inválidos y caracteres de control. La API se comprobó con un mensaje MIME de texto vacío y HTML.
+
+Se verificó en navegador un correo ficticio: indicación de texto vacío, sección «Enlaces del mensaje», dominio visible y conservación de la sección al abrir el HTML aislado. La extracción del correo real aportado se comprobó localmente, sin visitar sus enlaces ni incluir el mensaje o sus tokens en el repositorio. No se consumió la verificación ni se enviaron mensajes.
+
 ## Cuentas invitadas · 0.4 · 2026-11-01
 
 Resultado: **127 pruebas aprobadas y 3 omitidas**, con la advertencia de deprecación de Starlette ya documentada. Las nuevas pruebas usan únicamente identidades y contraseñas ficticias.

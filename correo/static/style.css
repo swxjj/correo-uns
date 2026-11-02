@@ -2,3 +2,4 @@
 
 .login-panel{max-width:620px;margin:55px auto;padding:28px;background:#fff;border:1px solid #aaa;border-radius:5px}.login-panel p{line-height:1.5}.login-panel #login-status{color:#7e2d1c;min-height:24px}header #logout{margin-left:auto;font-size:12px}@media(max-width:680px){.login-panel{margin:20px 12px;padding:20px}}
 header #current-account{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}@media(max-width:760px){header{height:auto;min-height:47px;flex-wrap:wrap;padding:8px 14px;gap:8px}header #current-account{display:block;order:3;flex-basis:100%}}
+.message-links{border-top:1px solid #ccc;margin-top:20px;padding-top:12px}.message-links li{margin:10px 0;overflow-wrap:anywhere}.message-links a{color:#244e80}
