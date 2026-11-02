@@ -21,6 +21,8 @@ node_modules/
 !requirements-lock.txt
 config.json
 sync.json
+access.json
+CorreoUNS-usuarios/
 .env
 .env.*
 !.env.example

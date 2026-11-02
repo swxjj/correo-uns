@@ -1,4 +1,5 @@
 import asyncio
+from contextvars import ContextVar
 from contextlib import asynccontextmanager
 import json
 import os
@@ -18,6 +19,7 @@ from .paths import data_root
 from .service import Service, UserError, explain
 from .mime import content, sanitized_html, build_message, addresses, safe_name
 from .auth import Auth, OverlayVault, WebSettings, COOKIE, PRE_COOKIE, MAX_SECONDS
+from .accounts import Accounts, AccountProxy, EmptyVault
 
 MAX_REQUEST = 64*1024*1024
 ASSETS = Path(__file__).parent/'static'
@@ -115,19 +117,36 @@ def create_app(root=None, start_worker=True, vault=None, web: WebSettings | None
             raise ValueError('Configurá primero la cuenta propietaria y ambos usuarios con la dirección institucional completa en el modo local.')
         vault=OverlayVault(vault)
     service = Service(store,vault)
+    owner_store,owner_service,owner_vault=store,service,vault
+    context=ContextVar('correo_account',default=None)
+    accounts=Accounts(store,vault,service,lambda:OverlayVault(EmptyVault())) if web else None
     token = random_secrets.token_urlsafe(32)
-    auth=Auth(store,vault,web) if web else None
+    auth=Auth(store,vault,web,accounts=accounts) if web else None
+    if web:
+        store=AccountProxy(context,'store');service=AccountProxy(context,'service');vault=AccountProxy(context,'vault')
 
     @asynccontextmanager
     async def lifespan(app):
         if start_worker:
-            service.start()
+            if accounts:accounts.start()
+            else:owner_service.start()
+        async def cleanup():
+            while True:
+                await asyncio.sleep(5)
+                with auth.lock:auth.clean()
+        task=asyncio.create_task(cleanup()) if auth else None
         yield
-        service.stop.set()
+        if task:
+            task.cancel()
+            try:await task
+            except asyncio.CancelledError:pass
+        if accounts:accounts.stop()
+        else:owner_service.stop.set()
 
     app = FastAPI(title='Correo UNS local',docs_url=None,redoc_url=None,openapi_url=None,lifespan=lifespan)
-    app.state.store,app.state.service,app.state.token,app.state.vault = store,service,token,vault
+    app.state.store,app.state.service,app.state.token,app.state.vault = owner_store,owner_service,token,owner_vault
     app.state.auth=auth
+    app.state.accounts=accounts
 
     def secured(response):
         response.headers.update({'Cache-Control':'no-store, private' if web else 'no-store','CDN-Cache-Control':'no-store','Vercel-CDN-Cache-Control':'no-store','X-Content-Type-Options':'nosniff','Referrer-Policy':'no-referrer','X-Frame-Options':'DENY','Cross-Origin-Resource-Policy':'same-origin','Content-Security-Policy':"default-src 'none'; script-src 'self'; style-src 'self'; connect-src 'self'; img-src 'self'; frame-src 'self'; form-action 'none'; base-uri 'none'; frame-ancestors 'none'"})
@@ -136,6 +155,7 @@ def create_app(root=None, start_worker=True, vault=None, web: WebSettings | None
 
     @app.middleware('http')
     async def protect(request, call_next):
+        account_context=None
         host = request.headers.get('host','')
         if not (web.host_allowed(host) if web else re.fullmatch(r'127\.0\.0\.1(?::[0-9]{1,5})?',host)):
             return secured(Response('Host no permitido.',status_code=403))
@@ -155,6 +175,8 @@ def create_app(root=None, start_worker=True, vault=None, web: WebSettings | None
                 else:
                     session=auth.session(request.cookies.get(COOKIE),touch=request.url.path not in ('/api/status','/api/auth/me'))
                     if not session:return secured(JSONResponse({'detail':'Tu sesión terminó. Volvé a ingresar.'},status_code=401))
+                    account_context=accounts.existing(session['account'])
+                    if account_context is None:return secured(JSONResponse({'detail':'Tu sesión terminó. Volvé a ingresar.'},status_code=401))
                     if not csrf.isascii() or not random_secrets.compare_digest(csrf,session['csrf']):return secured(JSONResponse({'detail':'Token de sesión inválido. Recargá la página.'},status_code=403))
                     if request.url.path.endswith('/send') and not session['smtp']:
                         return secured(JSONResponse({'detail':session['warning']},status_code=403))
@@ -171,7 +193,9 @@ def create_app(root=None, start_worker=True, vault=None, web: WebSettings | None
                     return secured(Response('El archivo o solicitud supera el límite permitido.',status_code=413))
                 chunks.append(chunk)
             request._body = b''.join(chunks)
-        response = await call_next(request)
+        handle=context.set(account_context)
+        try:response = await call_next(request)
+        finally:context.reset(handle)
         return secured(response)
 
     @app.exception_handler(RequestValidationError)
@@ -217,9 +241,7 @@ def create_app(root=None, start_worker=True, vault=None, web: WebSettings | None
     @app.post('/api/auth/login')
     def login(value: Login,request: Request):
         if not auth:raise HTTPException(404)
-        if not service.operation.acquire(blocking=False):return JSONResponse({'detail':'Hay una operación de correo en curso. Esperá a que termine antes de ingresar.'},status_code=429)
-        try:result,code,message=auth.login(value.surname,value.lu,value.password,request.cookies.get(COOKIE,''))
-        finally:service.operation.release()
+        result,code,message=auth.login(value.surname,value.lu,value.password,request.cookies.get(COOKIE,''))
         if not result:return JSONResponse({'detail':message},status_code=code,headers={'Retry-After':'300'} if code==429 else {})
         raw,entry=result
         response=JSONResponse({'message':'Ingreso correcto.','smtp_available':entry['smtp'],'warning':entry['warning']})
@@ -232,7 +254,7 @@ def create_app(root=None, start_worker=True, vault=None, web: WebSettings | None
     def me(request: Request):
         if not auth:return {'enabled':False}
         session=auth.session(request.cookies.get(COOKIE),touch=False)
-        return {'enabled':True,'smtp_available':session['smtp'],'warning':session['warning']}
+        return {'enabled':True,'address':session['account'],'smtp_available':session['smtp'],'warning':session['warning']}
 
     @app.post('/api/auth/logout')
     def logout(request: Request):

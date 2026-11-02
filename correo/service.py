@@ -233,10 +233,11 @@ class Service:
         self.status['running'] = True
         threading.Thread(target=self.sync,kwargs={'already_acquired':True},daemon=True).start()
 
-    def start(self):
+    def start(self, enabled=None):
         self.next_due = time.monotonic()+self.store.config()['interval']*60
         def loop():
             while not self.stop.wait(1):
+                if enabled is not None and not enabled():continue
                 if self.store.config()['auto'] and self.status['uidl'] is not False and time.monotonic() >= self.next_due:
                     try:
                         self.sync()

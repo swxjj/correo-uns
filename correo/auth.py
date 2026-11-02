@@ -1,4 +1,4 @@
-"""Single-owner web sessions. Passwords never enter cookies, files or logs."""
+"""Allowlisted web sessions. Passwords never enter cookies, files or logs."""
 from collections import deque
 from concurrent.futures import ThreadPoolExecutor
 from dataclasses import dataclass
@@ -59,17 +59,19 @@ def login_address(surname,lu):
 
 
 class Auth:
-    def __init__(self,store,vault,settings,clock=time.monotonic):
+    def __init__(self,store,vault,settings,clock=time.monotonic,accounts=None):
         self.store,self.vault,self.settings,self.clock=store,vault,settings,clock
-        self.sessions={};self.pre={};self.attempts=deque()
-        self.lock=threading.RLock();self.login_lock=threading.Lock()
+        self.accounts=accounts
+        self.sessions={};self.pre={};self.attempts=deque();self.account_attempts={}
+        self.lock=threading.RLock();self.login_locks={}
         self.probe=self.check_protocol
 
     def clean(self):
         now=self.clock()
-        self.sessions={k:v for k,v in self.sessions.items() if now-v['seen']<IDLE_SECONDS and now-v['created']<MAX_SECONDS}
+        self.sessions={k:v for k,v in self.sessions.items() if now-v['seen']<IDLE_SECONDS and now-v['created']<MAX_SECONDS and (self.accounts is None or self.accounts.allowed(v['account']))}
         self.pre={k:v for k,v in self.pre.items() if now-v['created']<600}
-        if not self.sessions:self.vault.session.clear()
+        if self.accounts:self.accounts.clear_inactive({v['account'] for v in self.sessions.values()})
+        elif not self.sessions:self.vault.session.clear()
 
     @staticmethod
     def digest(value):return hashlib.sha256(value.encode()).hexdigest()
@@ -106,18 +108,34 @@ class Auth:
             if client:close_client(client)
 
     def login(self,surname,lu,password,old_cookie=''):
+        try:address=login_address(surname,lu)
+        except ValueError:address=None
         with self.lock:
             now=self.clock()
             while self.attempts and now-self.attempts[0]>=300:self.attempts.popleft()
-            if len(self.attempts)>=5:return None,429,'Demasiados intentos. Esperá cinco minutos antes de volver a probar.'
+            key=address or '<invalid>'
+            if key not in self.account_attempts:
+                if len(self.account_attempts)>=256:self.account_attempts.pop(next(iter(self.account_attempts)))
+                self.account_attempts[key]=deque()
+            attempts=self.account_attempts[key]
+            while attempts and now-attempts[0]>=300:attempts.popleft()
+            if len(attempts)>=5 or len(self.attempts)>=30:return None,429,'Demasiados intentos. Esperá cinco minutos antes de volver a probar.'
             self.attempts.append(now)
-        try:address=login_address(surname,lu)
-        except ValueError:return None,401,'No se pudo validar el acceso. Revisá apellido, LU y contraseña.'
-        cfg=self.store.config()
-        if not cfg.get('address') or not secrets.compare_digest(address,cfg['address'].lower()):
+            attempts.append(now)
+        if not address:return None,401,'No se pudo validar el acceso. Revisá apellido, LU y contraseña.'
+        cfg=self.accounts.config_for(address) if self.accounts else self.store.config()
+        if not cfg or not cfg.get('address') or not secrets.compare_digest(address,cfg['address'].lower()):
             return None,401,'No se pudo validar el acceso. Revisá apellido, LU y contraseña.'
-        if not self.login_lock.acquire(blocking=False):return None,429,'Ya hay una validación en curso. Esperá a que termine.'
+        with self.lock:login_lock=self.login_locks.setdefault(address,threading.Lock())
+        if not login_lock.acquire(blocking=False):return None,429,'Ya hay una validación en curso para esta cuenta. Esperá a que termine.'
+        operation=None
         try:
+            existing=self.accounts.existing(address) if self.accounts else None
+            if existing:
+                operation=existing.service.operation
+                if not operation.acquire(blocking=False):
+                    operation=None
+                    return None,429,'Hay una operación de correo en curso para esta cuenta. Esperá antes de ingresar.'
             # Identity is fixed server-side, never taken from editable browser fields.
             cfg={**cfg,'pop_user':address,'smtp_user':address}
             with ThreadPoolExecutor(max_workers=2) as pool:
@@ -128,16 +146,22 @@ class Auth:
                 return None,401,'No se pudo validar el acceso POP3. Revisá la contraseña o intentá más tarde si el servicio de la UNS no está disponible.'
             with self.lock:
                 self.clean()
+                item=self.accounts.ensure(address) if self.accounts else None
                 self.sessions.pop(self.digest(old_cookie or ''),None)
-                if len(self.sessions)>=16:self.sessions.pop(next(iter(self.sessions)))
+                own_sessions=[key for key,value in self.sessions.items() if value['account']==address]
+                if len(own_sessions)>=16:self.sessions.pop(own_sessions[0])
                 now=self.clock();raw=secrets.token_urlsafe(32)
-                entry={'csrf':secrets.token_urlsafe(32),'created':now,'seen':now,'smtp':smtp_ok,'warning':'' if smtp_ok else 'Ingresaste con POP3. SMTP no pudo autenticarse; podés leer y guardar borradores, pero el envío está deshabilitado. Volvé a iniciar sesión para probarlo nuevamente.'}
+                entry={'account':address,'csrf':secrets.token_urlsafe(32),'created':now,'seen':now,'smtp':smtp_ok,'warning':'' if smtp_ok else 'Ingresaste con POP3. SMTP no pudo autenticarse; podés leer y guardar borradores, pero el envío está deshabilitado. Volvé a iniciar sesión para probarlo nuevamente.'}
                 self.sessions[self.digest(raw)]=entry
-                self.vault.session[secret_key(cfg,'pop')]=password
-                if smtp_ok:self.vault.session[secret_key(cfg,'smtp')]=password
-                self.attempts.clear()
+                vault=item.vault if item else self.vault
+                vault.session[secret_key(cfg,'pop')]=password
+                if smtp_ok:vault.session[secret_key(cfg,'smtp')]=password
+                if item:item.active=True
+                attempts.clear()
             return (raw,entry),200,''
-        finally:self.login_lock.release()
+        finally:
+            if operation:operation.release()
+            login_lock.release()
 
     def logout(self,cookie):
         with self.lock:
