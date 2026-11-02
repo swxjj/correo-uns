@@ -1,5 +1,19 @@
 # Verificación de Correo UNS
 
+## Cuentas invitadas · 0.4 · 2026-11-01
+
+Resultado: **127 pruebas aprobadas y 3 omitidas**, con la advertencia de deprecación de Starlette ya documentada. Las nuevas pruebas usan únicamente identidades y contraseñas ficticias.
+
+Se verificó aislamiento entre propietario e invitado en configuración, credenciales, listado, búsqueda, lectura, HTML, originales, adjuntos, estados, respuestas, borradores, envíos y respaldos. Conocer un identificador de la otra cuenta no permite acceder a su archivo; cambiar parámetros, encabezados o tokens tampoco cambia el usuario vinculado a la sesión.
+
+Se ejercitaron logins, rutas y descargas concurrentes; se comprobó que UIDL, SMTP y sus contraseñas siempre usen el contexto correcto. Los límites de intentos y sesiones de un invitado no expulsan ni bloquean individualmente al propietario. El rechazo SMTP de una cuenta no deshabilita el envío de otra.
+
+Se comprobaron cierre y vencimiento de sesión independientes, revocación sin borrar mensajes, pausa/reanudación de actualización automática de invitados, persistencia del archivo al reiniciar, bloqueo entre instancias y conservación del archivo invitado al restaurar un respaldo del propietario. La herramienta local de invitaciones se probó con alta, listado, revocación y entradas inválidas, sin modificar la configuración del propietario.
+
+Se recorrió en navegador la demostración local de dos cuentas: el invitado y el propietario ingresaron sucesivamente, vieron su dirección en el encabezado y un mensaje diferente en cada buzón. Las cuentas ficticias de demostración y sus clientes de correo simulados no se habilitan en el modo real.
+
+Se añadió la invitación real solicitada exclusivamente al archivo de acceso local, fuera del repositorio y de los paquetes. No se introdujo ni guardó su contraseña y **no se autenticó esa cuenta contra la UNS**. Esa prueba queda pendiente del ingreso del invitado en el formulario. La beta pública y su túnel se mantienen detenidos, según lo solicitado previamente; los procesos locales de demostración se cierran al terminar la verificación.
+
 ## Beta web de Windows · 0.3 · 2026-10-31
 
 Resultado: **99 pruebas aprobadas, 3 omitidas** por dependencias específicas de macOS/keyring, y una advertencia de deprecación del cliente de pruebas de Starlette. Se verificaron también compilación Python, sintaxis de ambos scripts de navegador y ausencia de errores de whitespace en el diff.

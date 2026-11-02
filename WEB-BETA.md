@@ -1,18 +1,42 @@
-# Beta web para Windows · 0.3
+# Beta web para Windows · 0.4
 
 ## Acceso actual
 
 La entrada pública de la beta es **https://correo-uns-beta.vercel.app**. El archivo y los mensajes siguen en la PC de Windows del propietario.
 
-Ingresá **apellido**, **LU** y la **contraseña del correo institucional**. El formulario muestra la dirección que se construirá: `apellido.LU@alu.uns.edu.ar`. El apellido se pasa a minúsculas y se quitan las tildes; la LU conserva sus ceros iniciales. Usá el apellido tal como aparece en tu dirección. Esta beta admite solamente la cuenta ya configurada en el servidor; no registra usuarios ni abre archivos de otros alumnos.
+Ingresá **apellido**, **LU** y la **contraseña del correo institucional**. El formulario muestra la dirección que se construirá: `apellido.LU@alu.uns.edu.ar`. El apellido se pasa a minúsculas y se quitan las tildes; la LU conserva sus ceros iniciales. Usá el apellido tal como aparece en tu dirección. Se admite la cuenta propietaria y las cuentas invitadas expresamente en una lista local; no hay registro público. Cada cuenta accede únicamente a su propio archivo. La cuenta activa aparece en el encabezado.
 
 Se autentica contra POP3 y SMTP en paralelo usando TLS con certificados válidos. Durante el ingreso no se ejecuta RETR ni DATA: no se descargan ni envían mensajes. Si POP3 autentica pero SMTP falla, podés leer, archivar, buscar y guardar borradores; **Enviar ahora queda deshabilitado**. Para volver a comprobar SMTP, cerrá sesión e ingresá nuevamente.
 
-La contraseña ingresada se usa en memoria, sin guardarla en SQLite, cookies, archivos o logs. No modifica las credenciales que ya existieran en el Administrador de Windows. Esas credenciales previas pueden seguir habilitando las actualizaciones automáticas del backend. La contraseña nueva en memoria se descarta cuando termina la última sesión, al comprobar su vencimiento o al detener el proceso.
+La contraseña ingresada se usa en memoria, sin guardarla en SQLite, cookies, archivos o logs. La cuenta propietaria conserva de forma independiente las credenciales que ya existieran en el Administrador de Windows; pueden seguir habilitando sus actualizaciones automáticas. Las cuentas invitadas no utilizan ese almacén ni heredan credenciales de la cuenta propietaria. La contraseña de cada cuenta se descarta cuando termina su última sesión, al comprobar el vencimiento o al detener el proceso. Las actualizaciones automáticas de invitados se pausan sin sesiones activas y se reanudan tras un nuevo ingreso válido, si estaban habilitadas.
 
 Las sesiones vencen tras **30 minutos sin actividad del usuario** o **8 horas como máximo**. La consulta automática de estado no prolonga el tiempo de inactividad. Al vencer, la aplicación pide recargar e ingresar nuevamente; no descarta automáticamente texto sin guardar. Las cookies de Internet son Secure, HttpOnly y SameSite=Strict. El cierre de sesión invalida el identificador en el servidor; reiniciar el backend invalida todas las sesiones.
 
-Hay un máximo global de **5 intentos de ingreso en 5 minutos**, sin reintentos automáticos de contraseña. Es una protección deliberadamente conservadora para esta beta de una sola cuenta. No se muestra si otra dirección institucional existe.
+Hay un máximo de **5 intentos de ingreso por cuenta en 5 minutos**, más un límite global de **30 intentos en 5 minutos**, sin reintentos automáticos de contraseña. Los errores de una cuenta no consumen el cupo individual de otra. Cada cuenta puede mantener hasta 16 sesiones; crear sesiones de invitado no expulsa las del propietario. No se muestra si otra dirección institucional existe.
+
+## Invitar y revocar cuentas desde Windows
+
+Las invitaciones se administran únicamente desde la PC del propietario, sin contraseñas. Ejemplo con una identidad **ficticia**:
+
+```powershell
+.\.venv\Scripts\python.exe -m tools.users add --surname gomez --lu 234567
+.\.venv\Scripts\python.exe -m tools.users list
+.\.venv\Scripts\python.exe -m tools.users remove --surname gomez --lu 234567
+```
+
+La lista real está en **`%LOCALAPPDATA%\CorreoUNS-usuarios\access.json`**, fuera del código y excluida de Git. Invitar no crea ni modifica una cuenta de la UNS: el invitado debe introducir su propia contraseña en el formulario y superar la autenticación POP3. No se crea su archivo antes de una autenticación correcta. La lista se comprueba en cada acceso; revocar invalida las sesiones de esa cuenta y pausa sus descargas, sin borrar sus mensajes ni cerrar otras sesiones. Una operación que ya estaba en curso puede terminar.
+
+Tu archivo existente sigue en **`%LOCALAPPDATA%\CorreoUNS`**, sin migración. Cada invitado utiliza su propia carpeta bajo **`%LOCALAPPDATA%\CorreoUNS-usuarios\mailboxes\<identificador>`**, con SQLite, originales, borradores, enviados, estados y credenciales en memoria independientes. Los servidores y puertos se toman de la configuración institucional del propietario; los usuarios POP3 y SMTP siempre corresponden a la dirección autenticada del invitado.
+
+Cada descarga de respaldo incluye únicamente el archivo de quien inició sesión. La copia de la cuenta propietaria no incluye ni elimina las carpetas de invitados. Respaldá por separado los archivos invitados y la lista de acceso cuando hagas mantenimiento de toda la PC. Para localizar las carpetas:
+
+```powershell
+.\.venv\Scripts\python.exe -m tools.users list --paths
+```
+
+Para restaurar un archivo invitado, detené la beta y abrí el modo local indicando **su** carpeta mediante `python -m correo --data "ruta-del-archivo-invitado"`. Seleccioná un respaldo de esa misma cuenta. No restaures la copia invitada sobre la carpeta de la cuenta propietaria. Los archivos se bloquean entre procesos para impedir que el modo local y la beta los abran simultáneamente.
+
+El aislamiento lo aplica la aplicación; los originales y respaldos siguen sin cifrado. El administrador de Windows puede acceder a los archivos de los invitados en el disco. Informá esto a cada invitado antes de que use la beta. Para probar dos cuentas en una misma PC, usá perfiles de navegador distintos o cerrá sesión antes de cambiar de cuenta.
 
 ## Tres formas de iniciar
 
@@ -73,7 +97,7 @@ Sin CLI, también podés actualizar el destino mediante las reglas de proxy del 
 - El túnel no abre puertos entrantes del router. Sus rutas siguen protegidas por la misma autenticación; conocer la URL del túnel no permite leer el correo.
 - Vercel y Cloudflare intervienen en el transporte HTTPS. Los mensajes permanecen almacenados en la PC, pero el tráfico pasa por esos proveedores.
 - Desde la web se pueden cambiar nombre visible e intervalo de actualización y descargar respaldos. La cuenta, los servidores, la gestión de credenciales, la restauración y la salida del proceso se administran únicamente en modo local.
-- El acceso es solo para el propietario en esta etapa. No compartas la contraseña institucional con testers; para mostrarles la interfaz usá la demostración ficticia.
+- El acceso se limita al propietario y su lista de invitados. Cada persona usa su propia contraseña institucional; no compartas credenciales entre testers.
 - Quick Tunnel es temporal y para testing, sin garantía de disponibilidad. Si se detiene la PC, el supervisor o el túnel, Vercel no podrá contactar el archivo.
 - Las descargas largas se realizan en segundo plano; el proxy no queda esperando toda la sincronización POP3. Deben comprobarse los tamaños y tiempos de los adjuntos reales de cada uso.
 - La versión macOS sigue en el repositorio. La beta de Internet y su supervisor se verifican primero en Windows.
@@ -84,7 +108,7 @@ Sin CLI, también podés actualizar el destino mediante las reglas de proxy del 
 .\.venv\Scripts\python.exe -m tools.demo --web
 ```
 
-Abrí `http://127.0.0.1:8876`. Credenciales **ficticias exclusivas de la demo**: apellido `perez`, LU `123456`, contraseña `demo-correo`. POP3 y SMTP están reemplazados por simuladores; no se contacta a la UNS ni se usa el Administrador de credenciales. El modo real no incluye esa cuenta ni una contraseña de prueba.
+Abrí `http://127.0.0.1:8876`. Credenciales **ficticias exclusivas de la demo**: propietario `perez`, LU `123456`; invitado `gomez`, LU `234567`; ambos con contraseña `demo-correo`. Cada uno ve un mensaje ficticio distinto en su propio buzón. POP3 y SMTP están reemplazados por simuladores; no se contacta a la UNS ni se usa el Administrador de credenciales. El modo real no incluye estas cuentas ni una contraseña de prueba.
 
 ## Fuentes técnicas
 

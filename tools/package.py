@@ -5,7 +5,7 @@ import zipfile
 
 if __name__=='__main__':
     root=Path(__file__).resolve().parent.parent
-    output=root/'output'/'CorreoUNS-v0.3-beta.zip'
+    output=root/'output'/'CorreoUNS-v0.4-beta.zip'
     output.parent.mkdir(exist_ok=True)
     files=[root/name for name in ('README.md','VERIFICACION.md','CHANGELOG.md','WEB-BETA.md','requirements.txt','requirements-lock.txt','requirements-dev.txt','Instalar.cmd','Iniciar Correo.cmd','Iniciar Beta Web.cmd','Iniciar Beta Internet.cmd','Iniciar Correo.command','requirements-macos.txt','requirements-build-macos.txt','MACOS.md','.gitignore')]
     for folder in ('correo','tests','tools'):

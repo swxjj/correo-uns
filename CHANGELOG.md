@@ -13,6 +13,17 @@
 
 # Cambios
 
+## 0.4 beta · 2026-11-01
+
+- Acceso por invitación local, sin registro público y sin incluir cuentas reales en el repositorio.
+- Archivo, SQLite, credenciales en memoria, servicios POP3/SMTP y bloqueos independientes por cuenta.
+- Contexto de usuario vinculado exclusivamente a la sesión validada, incluido en las operaciones asíncronas y los trabajadores de descarga.
+- Separación de mensajes, adjuntos, búsqueda, borradores, enviados, estados y respaldos; el archivo existente del propietario conserva su ubicación.
+- Revocación de invitados y cierre/vencimiento de sesiones sin afectar otras cuentas ni borrar mensajes.
+- Actualizaciones automáticas de invitados pausadas cuando no hay sesiones activas.
+- Límites de intentos y sesiones por cuenta, además de un límite general del servidor.
+- Dirección activa visible en el encabezado; demostración de dos buzones ficticios y pruebas de acceso cruzado y concurrencia.
+
 ## 0.3 beta · 2026-10-31
 
 - Login para la cuenta propietaria con apellido, LU y contraseña institucional.

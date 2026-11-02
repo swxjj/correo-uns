@@ -1,10 +1,10 @@
-# Correo UNS · versión 0.3 beta
+# Correo UNS · versión 0.4 beta
 
 Aplicación personal para **Windows y macOS**, Python 3.11 o superior, FastAPI y SQLite. Se ejecuta en esta PC y abre una interfaz HTML sencilla en español, con barras grises y navegación de correo clásica. El modo local no requiere hosting ni servicios pagos. No tiene integración con Gmail ni funciones de IA.
 
 ## Beta web de Windows
 
-La beta permite ingresar desde Internet mediante Vercel y un túnel HTTPS hacia la PC del propietario. Usa apellido, LU y contraseña institucional, verifica POP3 y SMTP sin enviar mensajes, y mantiene el archivo en Windows. Por ahora admite únicamente la cuenta configurada. El modo local y el port de macOS se conservan.
+La beta permite ingresar desde Internet mediante Vercel y un túnel HTTPS hacia la PC del propietario. Usa apellido, LU y contraseña institucional, verifica POP3 y SMTP sin enviar mensajes, y mantiene los archivos en Windows. Admite la cuenta propietaria y una lista local de invitados, con buzones, credenciales y sesiones aislados. El modo local y el port de macOS se conservan. Las invitaciones se administran con `python -m tools.users`; no hay registro público.
 
 Consultá **[WEB-BETA.md](WEB-BETA.md)** para acceder, iniciar, detener y actualizar el túnel. La URL actual es **https://correo-uns-beta.vercel.app**. Vercel y Cloudflare intervienen en el transporte; no alojan el archivo SQLite ni los originales. El túnel temporal debe actualizarse en Vercel cada vez que se reinicia.
 
