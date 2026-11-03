@@ -17,7 +17,7 @@ async function api(path,options={}){
 }
 async function action(fn){try{await fn();}catch(error){notice(error.message,true);}}
 function selectNav(name){document.querySelectorAll('nav button').forEach(b=>b.classList.toggle('selected',b.dataset.folder===name||b.id===name));}
-async function leave(){clearTimeout(saveTimer);if(dirty||saving)await saveDraft(false);draftId=null;current=null;}
+async function leave(){$('#body-view iframe')?._observer?.disconnect();clearTimeout(saveTimer);if(dirty||saving)await saveDraft(false);draftId=null;current=null;}
 async function list(newFolder=folder){await leave();folder=newFolder;page='list';selectNav(folder);await renderList();}
 async function renderList(){
   const rows=await api('messages?folder='+encodeURIComponent(folder)+'&q='+encodeURIComponent(query));
@@ -32,7 +32,7 @@ async function download(path,name){const response=await api(path,{method:path===
 async function openMessage(id){
   await leave();const msg=await api('messages/'+id);if(msg.info.folder==='drafts'){await compose(msg);return;}
   current=msg;page='message';if(msg.info.unread)await api('messages/'+id,{method:'PATCH',body:{unread:false}});
-  main.innerHTML=`<article class="document"><div class="actions"><button id="back">Volver</button><button id="reply">Responder</button><button id="reply-all">Responder a todos</button><button id="star">${msg.info.starred?'Quitar destacado':'Destacar'}</button><button id="archive">${msg.info.archived?'Volver a Entrada':'Archivar localmente'}</button><button id="unread">Marcar no leído</button></div>${msg.info.state?`<p class="note">${esc(states[msg.info.state]||msg.info.state)}. ${msg.info.state==='accepted'?'La aceptación por SMTP no confirma la entrega final.':msg.info.state==='uncertain'?'No reenvíes sin comprobar el resultado.':''}</p>`:''}<div class="message-head"><h2>${esc(msg.subject)}</h2><dl><dt>De:</dt><dd>${esc(msg.sender)}</dd><dt>Para:</dt><dd>${esc(msg.to)}</dd>${msg.cc?`<dt>CC:</dt><dd>${esc(msg.cc)}</dd>`:''}${msg.info.bcc?`<dt>CCO local:</dt><dd>${esc(msg.info.bcc)}</dd>`:''}<dt>Fecha:</dt><dd>${esc(msg.date)}</dd></dl></div><div class="actions"><button id="original">Guardar original .eml</button>${msg.has_html?'<button id="html">Ver HTML aislado (sin imágenes externas)</button>':''}</div><div id="body-view"><pre class="body">${esc(msg.body)}</pre></div><section class="attachments"><h3>Adjuntos (${msg.attachments.length})</h3><ul>${msg.attachments.map(a=>`<li><button data-download="${a.index}">${esc(a.name)}</button> <span class="muted">${Math.ceil(a.size/1024)} KB</span></li>`).join('')||'<li>Sin adjuntos.</li>'}</ul><p class="muted">Los adjuntos se guardan mediante el navegador. No se abren automáticamente.</p></section></article>`;
+  main.innerHTML=`<article class="document"><div class="actions"><button id="back">Volver</button><button id="reply">Responder</button><button id="reply-all">Responder a todos</button><button id="star">${msg.info.starred?'Quitar destacado':'Destacar'}</button><button id="archive">${msg.info.archived?'Volver a Entrada':'Archivar localmente'}</button><button id="unread">Marcar no leído</button></div>${msg.info.state?`<p class="note">${esc(states[msg.info.state]||msg.info.state)}. ${msg.info.state==='accepted'?'La aceptación por SMTP no confirma la entrega final.':msg.info.state==='uncertain'?'No reenvíes sin comprobar el resultado.':''}</p>`:''}<div class="message-head"><h2>${esc(msg.subject)}</h2><dl><dt>De:</dt><dd>${esc(msg.sender)}</dd><dt>Para:</dt><dd>${esc(msg.to)}</dd>${msg.cc?`<dt>CC:</dt><dd>${esc(msg.cc)}</dd>`:''}${msg.info.bcc?`<dt>CCO local:</dt><dd>${esc(msg.info.bcc)}</dd>`:''}<dt>Fecha:</dt><dd>${esc(msg.date)}</dd></dl></div><div class="actions"><button id="original">Guardar original .eml</button><button id="reading" aria-pressed="true">Lectura cómoda</button><button id="plain" aria-pressed="false">Texto plano</button><label class="reader-size">Tamaño de letra <select id="reader-size"><option value="small">Pequeña</option><option value="normal">Normal</option><option value="large">Grande</option></select></label></div><div id="body-view"></div><section class="attachments"><h3>Adjuntos (${msg.attachments.length})</h3><ul>${msg.attachments.map(a=>`<li><button data-download="${a.index}">${esc(a.name)}</button> <span class="muted">${Math.ceil(a.size/1024)} KB</span></li>`).join('')||'<li>Sin adjuntos.</li>'}</ul><p class="muted">Los adjuntos se guardan mediante el navegador. No se abren automáticamente.</p></section></article>`;
   if(msg.links?.length){
     const section=document.createElement('section');section.className='message-links';
     const heading=document.createElement('h3');heading.textContent='Enlaces del mensaje';section.append(heading);
@@ -43,7 +43,7 @@ async function openMessage(id){
       let url;try{url=new URL(link.url);}catch{continue;}
       if(!['https:','http:'].includes(url.protocol)||url.username||url.password)continue;
       const item=document.createElement('li');const a=document.createElement('a');
-      a.href=link.url;a.textContent=link.label;a.target='_blank';a.rel='noopener noreferrer';a.referrerPolicy='no-referrer';a.title=link.url;
+      a.href=link.url;a.textContent=link.label;a.title=link.url;a.onclick=e=>{e.preventDefault();reviewLink(link);};
       const host=document.createElement('span');host.className='muted';host.textContent=' · '+url.host;
       item.append(a,host);links.append(item);
     }
@@ -56,7 +56,46 @@ async function openMessage(id){
   $('#unread').onclick=()=>action(async()=>{await api('messages/'+id,{method:'PATCH',body:{unread:true}});await list();});
   $('#original').onclick=()=>action(()=>download('messages/'+id+'/eml',id+'.eml'));
   main.querySelectorAll('[data-download]').forEach(b=>b.onclick=()=>action(()=>download('messages/'+id+'/attachment/'+b.dataset.download,msg.attachments[Number(b.dataset.download)].name)));
-  if(msg.has_html)$('#html').onclick=()=>action(async()=>{const response=await api('messages/'+id+'/html',{raw:true});const iframe=document.createElement('iframe');iframe.title='Contenido HTML aislado';iframe.setAttribute('sandbox','');iframe.referrerPolicy='no-referrer';iframe.srcdoc=await response.text();$('#body-view').replaceChildren(iframe);});
+  setupReader(msg);
+}
+function reviewLink(link){
+  let url;try{url=new URL(link.url);}catch{return;}
+  if(!['https:','http:'].includes(url.protocol)||url.username||url.password)return;
+  const dialog=document.createElement('dialog');dialog.className='link-review';
+  dialog.innerHTML='<h2>Revisar enlace</h2><p>Vas a salir del correo y abrir este sitio:</p><p><strong id="link-host"></strong></p><label>Dirección completa<input id="link-url" readonly></label><p class="muted">El texto del mensaje no garantiza la identidad del sitio. Revisá el dominio antes de continuar.</p><div class="actions"><a class="download" id="link-open" target="_blank" rel="noopener noreferrer" referrerpolicy="no-referrer">Abrir en otra pestaña</a><button id="link-copy">Copiar enlace</button><button id="link-cancel">Cancelar</button></div><p id="link-copy-status" role="status"></p>';
+  dialog.querySelector('#link-host').textContent=url.host;
+  const input=dialog.querySelector('#link-url');input.value=link.url;
+  const open=dialog.querySelector('#link-open');open.href=link.url;open.onclick=()=>dialog.close();
+  dialog.querySelector('#link-copy').onclick=async()=>{try{await navigator.clipboard.writeText(link.url);dialog.querySelector('#link-copy-status').textContent='Enlace copiado.';}catch{input.focus();input.select();dialog.querySelector('#link-copy-status').textContent='Presioná Ctrl+C para copiar la dirección seleccionada.';}};
+  dialog.querySelector('#link-cancel').onclick=()=>dialog.close();dialog.onclose=()=>dialog.remove();
+  document.body.append(dialog);dialog.showModal();
+}
+function setupReader(msg){
+  const reading=msg.reading||{markup:'<pre>'+esc(msg.body)+'</pre>',text:msg.body,links:msg.links||[]};
+  let size='normal';try{size=localStorage.getItem('correo-reader-size')||size;}catch{}
+  if(!['small','normal','large'].includes(size))size='normal';
+  const select=$('#reader-size');select.value=size;
+  function show(plain=false){
+    const view=$('#body-view');view.querySelector('iframe')?._observer?.disconnect();view.className='reader-view '+size;
+    $('#reading').setAttribute('aria-pressed',String(!plain));$('#plain').setAttribute('aria-pressed',String(plain));
+    if(plain){const pre=document.createElement('pre');pre.className='body';pre.textContent=reading.text;view.replaceChildren(pre);return;}
+    const frame=document.createElement('iframe');frame.className='comfortable-reader';frame.title='Lectura cómoda del mensaje';
+    // Same-origin access is used only by our parent UI. Sender scripts remain disabled.
+    frame.setAttribute('sandbox','allow-same-origin');frame.referrerPolicy='no-referrer';
+    frame.onload=()=>{
+      const doc=frame.contentDocument;if(!doc)return;
+      doc.body.className=size;
+      doc.querySelectorAll('button[data-link]').forEach(button=>{button.onclick=()=>{const link=reading.links[Number(button.dataset.link)];if(link)reviewLink(link);};});
+      const resize=()=>{if(frame.isConnected)frame.height=String(Math.min(16000,Math.max(140,doc.body.scrollHeight+20)));};
+      resize();const observer=new ResizeObserver(()=>{if(frame.isConnected)resize();else observer.disconnect();});observer.observe(doc.body);
+      frame._observer=observer;
+    };
+    view.querySelector('iframe')?._observer?.disconnect();
+    frame.srcdoc='<!doctype html><html><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><meta http-equiv="Content-Security-Policy" content="default-src \'none\'; script-src \'none\'; style-src \'self\'; img-src \'none\'; connect-src \'none\'; form-action \'none\'; base-uri \'none\'"><link rel="stylesheet" href="/reader.css"></head><body>'+reading.markup+'</body></html>';
+    view.replaceChildren(frame);
+  }
+  select.onchange=()=>{size=select.value;try{localStorage.setItem('correo-reader-size',size);}catch{}show($('#plain').getAttribute('aria-pressed')==='true');};
+  $('#reading').onclick=()=>show(false);$('#plain').onclick=()=>show(true);show();
 }
 async function reply(id,all){const d=await api('messages/'+id+'/reply?all='+all,{method:'POST'});await compose(await api('messages/'+d.id));}
 async function compose(msg=null){

@@ -17,7 +17,8 @@ from .store import Store, DEFAULT, secret_key
 from .secrets import Secrets
 from .paths import data_root
 from .service import Service, UserError, explain
-from .mime import content, sanitized_html, build_message, addresses, safe_name, message_links
+from .mime import content, sanitized_html, build_message, addresses, safe_name
+from .reader import reading_content
 from .auth import Auth, OverlayVault, WebSettings, COOKIE, PRE_COOKIE, MAX_SECONDS
 from .accounts import Accounts, AccountProxy, EmptyVault
 
@@ -272,6 +273,10 @@ def create_app(root=None, start_worker=True, vault=None, web: WebSettings | None
     def css():
         return Response((ASSETS/'style.css').read_text('utf-8'),media_type='text/css')
 
+    @app.get('/reader.css')
+    def reader_styles():
+        return Response((ASSETS/'reader.css').read_text('utf-8'),media_type='text/css')
+
     @app.get('/favicon.ico')
     def favicon():
         return Response(status_code=204)
@@ -353,7 +358,8 @@ def create_app(root=None, start_worker=True, vault=None, web: WebSettings | None
     def message(ident: str):
         msg,plain,html,atts = content(store.raw(ident))
         info = store.info(ident)
-        return dict(info=info,subject=str(msg.get('Subject','(Sin asunto)')),sender=str(msg.get('From','')),to=str(msg.get('To','')),cc=str(msg.get('Cc','')),date=str(msg.get('Date','')),body=plain if plain.strip() else '(Este mensaje solo contiene HTML. Podés abrir la vista HTML aislada y usar los enlaces del mensaje que aparecen debajo.)',has_html=bool(html),links=message_links(plain,html),attachments=[{'name':a['name'],'size':a['size'],'index':i} for i,a in enumerate(atts)])
+        reading = reading_content(plain,html)
+        return dict(info=info,subject=str(msg.get('Subject','(Sin asunto)')),sender=str(msg.get('From','')),to=str(msg.get('To','')),cc=str(msg.get('Cc','')),date=str(msg.get('Date','')),body=plain if plain.strip() else '(Este mensaje solo contiene HTML. Podés abrir la vista HTML aislada y usar los enlaces del mensaje que aparecen debajo.)',reading=reading,has_html=bool(html),links=reading['links'],attachments=[{'name':a['name'],'size':a['size'],'index':i} for i,a in enumerate(atts)])
 
     @app.get('/api/messages/{ident}/html',response_class=HTMLResponse)
     def html(ident: str):

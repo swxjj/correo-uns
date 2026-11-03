@@ -22,13 +22,19 @@ def safe_name(name):
 
 def content(raw):
     msg = parse(raw)
-    plain, html, attachments = [], [], []
+    attachments = []
     def visit(part):
         if part.get_content_disposition() == 'attachment' or part.get_filename() or part.get_content_maintype() != 'text':
             if part.is_multipart() and not (part.get_content_disposition() == 'attachment' or part.get_filename() or part.get_content_type()=='message/rfc822'):
-                for child in part.iter_parts():
-                    visit(child)
-                return
+                children = list(part.iter_parts())
+                values = [visit(child) for child in children]
+                if part.get_content_subtype() == 'alternative':
+                    return tuple(next((v[i] for v in reversed(values) if v[i].strip()), '') for i in (0,1))
+                if part.get_content_subtype() == 'related':
+                    start = part.get_param('start')
+                    root = next((i for i,c in enumerate(children) if start and c.get('Content-ID') == start), 0)
+                    return values[root] if values else ('','')
+                return tuple('\n'.join(v[i] for v in values if v[i].strip()) for i in (0,1))
             data = part.get_payload(decode=True)
             if data is None:
                 payload = part.get_payload()
@@ -39,9 +45,10 @@ def content(raw):
                 value = part.get_content()
             except (LookupError, UnicodeError):
                 value = (part.get_payload(decode=True) or b'').decode('utf-8', 'replace')
-            (plain if part.get_content_type() == 'text/plain' else html).append(value)
-    visit(msg)
-    return msg, '\n'.join(plain), '\n'.join(html), attachments
+            return (value,'') if part.get_content_type() == 'text/plain' else ('',value)
+        return '',''
+    plain, html = visit(msg)
+    return msg, plain, html, attachments
 
 
 def metadata(raw):
