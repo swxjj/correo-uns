@@ -13,6 +13,14 @@
 
 # Cambios
 
+## Lectura cómoda · primera etapa · 2026-11-02
+
+- Lectura cómoda predeterminada y texto plano alternativo, con tipografía uniforme, estructura de párrafos, títulos, listas, citas y tablas desplazables.
+- Enlaces dentro del mensaje con revisión del dominio y dirección completa antes de abrir o copiar. No se realizan visitas automáticas.
+- Tamaño de letra recordado por navegador, navegación horizontal en pantallas pequeñas y supresión del contenido de scripts, estilos y formularios.
+- Selección de alternativas MIME sin duplicación y selección de la raíz de multipart/related. Los correos ya guardados se reinterpretan sin modificar originales ni estados locales.
+- La vista conserva aislamiento sin scripts ni recursos del remitente. Formato original e imágenes incrustadas quedan para una segunda etapa.
+
 ## Enlaces de mensajes · 2026-11-01
 
 - Lista de enlaces HTTP/HTTPS fuera del HTML aislado, con dominio visible y apertura explícita en otra pestaña sin referer ni acceso a la ventana original.

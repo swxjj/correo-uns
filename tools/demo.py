@@ -64,6 +64,14 @@ def make_app(web=False,port=8876):
     if app.state.accounts:app.state.accounts.service_factory=guest_service
     if not store.known('demo') and not store.listing('inbox'):
         app.state.service.sync()
+    if not any(m['subject']=='Lectura de prueba: inscripción y verificación' for m in store.listing('inbox')):
+        reading=EmailMessage(policy=policy.SMTP)
+        reading['From']='Cátedra ficticia <catedra@example.test>'
+        reading['To']=address
+        reading['Subject']='Lectura de prueba: inscripción y verificación'
+        reading.set_content('\n')
+        reading.add_alternative('<style>ESTILO_OCULTO</style><h1>Inscripción a la evaluación</h1><p>Hola, <strong>estudiante</strong>. Este correo es ficticio.</p><ul><li>Revisá la fecha.</li><li>Confirmá tu inscripción.</li></ul><table><tr><th>Materia</th><th>Fecha</th><th>Lugar</th></tr><tr><td>Física</td><td>12 de noviembre</td><td>Aula de ejemplo</td></tr></table><p><a href="https://example.test/verify?token=FICTICIO&amp;next=%2Fhome">Confirmar inscripción</a></p><blockquote>Mensaje anterior de ejemplo.</blockquote><script>CONTENIDO_ACTIVO</script><img src="https://tracking.invalid/pixel">',subtype='html')
+        store.save(reading.as_bytes())
     @app.middleware('http')
     async def demo_banner(request,call_next):
         response=await call_next(request)

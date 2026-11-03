@@ -1,5 +1,13 @@
 # Verificación de Correo UNS
 
+## Lectura cómoda · primera etapa · 2026-11-02
+
+Resultado: **149 pruebas aprobadas y 3 omitidas**, con la advertencia de Starlette ya documentada. Se verificaron estructura HTML uniforme, texto derivado cuando falta la alternativa de texto, preservación del texto original y de los parámetros de verificación, alternativas MIME sin duplicación, selección de raíz related y conservación de adjuntos. Si el HTML no contiene texto legible, se usa la alternativa de texto disponible. Contenido activo, CSS, recursos externos y controles del remitente no aparecen en el marcado del lector. La relectura vía API conserva bytes originales y estados leído/destacado/archivado.
+
+En Chromium se comprobaron lectura cómoda, texto plano, revisión de un enlace sin navegar, tamaño de letra y estilos efectivos, así como presentación móvil a 390 px. La inspección de solicitudes del navegador solo mostró recursos de la propia aplicación. El correo real de Figma se reinterpretó localmente y se comprobó su integridad; no se visitaron sus enlaces ni se incorporó su contenido al repositorio.
+
+El marco permite acceso de la interfaz del mismo origen para ajustar altura y manejar los botones, pero no permite scripts del mensaje. La política del documento bloquea scripts, imágenes, conexiones y formularios; solo se carga la hoja de estilos propia del lector. El HTML del remitente nunca aporta CSS, URLs navegables ni atributos de eventos al marco.
+
 ## Enlaces de verificación · 2026-11-01
 
 Resultado: **141 pruebas aprobadas y 3 omitidas**, con la misma advertencia de deprecación de Starlette. Se agregaron 14 casos de extracción de enlaces: preservación exacta del token HTML y sus parámetros, entidades, deduplicación, texto plano, imágenes con texto alternativo, exclusión de recursos de seguimiento y rechazo de esquemas activos, rutas locales, credenciales embebidas, puertos inválidos y caracteres de control. La API se comprobó con un mensaje MIME de texto vacío y HTML.
